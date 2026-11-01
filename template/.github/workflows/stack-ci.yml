@@ -1,0 +1,18 @@
+# Template-owned: template-obsidian. The stack slot base-ci.yml's required `ci` job calls.
+# A brain's checks (the vault check, scripts/check.sh) run in base-ci's `checks` job
+# through scripts/checks.d/20-obsidian.sh, so nothing is repeated here.
+name: Stack
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  obsidian:
+    name: Obsidian
+    runs-on: ubuntu-latest
+    steps:
+      - name: Nothing beyond scripts/checks.d
+        run: echo "The vault check runs in base-ci's checks job (scripts/checks.d/20-obsidian.sh)"

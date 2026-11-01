@@ -1,0 +1,39 @@
+# [[ project_name ]]
+
+[[ description ]]
+
+<!-- guidance: this README is yours (copier update never touches it). Say what the notes are
+for and who they are for. Then delete this comment. -->
+
+## For AI assistants
+
+**[AGENTS.md](AGENTS.md) and [.agents/stack.md](.agents/stack.md) are the only instruction files**;
+[CLAUDE.md](CLAUDE.md), [GEMINI.md](GEMINI.md) and the Copilot and Cursor pointers import them. Every change
+gets human review.
+
+## Checks
+
+The notes are an Obsidian vault: open `[[ vault_dir ]]` as a vault and start at `🏠 Home`. Design records are in
+`decisions/`, indexed by `Decisions.base`.
+
+```sh
+sh scripts/checks.sh            # every check: the stack contract, the vault, scripts/check.sh
+uv run scripts/check-vault.py   # front matter, embeds, design records
+sh scripts/check.sh             # this repository's own checks
+```
+
+CI also runs the secret scan (`scripts/check-docs-secrets.sh`, with Docker).
+
+This repository was generated from [template-base](https://github.com/andronics/template-base) and
+[template-obsidian](https://github.com/andronics/template-obsidian). Template fixes arrive as a weekly
+*Template update* PR per template.
+
+## License
+
+[% if license == 'Unlicense' %]
+Released into the public domain under the [Unlicense](LICENSE).
+[% elif license == 'Proprietary' %]
+Proprietary. Copyright © [[ copyright_holder ]], all rights reserved. See [LICENSE](LICENSE).
+[% else %]
+[[ license ]]. See [LICENSE](LICENSE).
+[% endif %]

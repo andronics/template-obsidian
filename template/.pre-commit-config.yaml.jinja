@@ -1,0 +1,14 @@
+# Template-owned: template-obsidian. The same checks as CI, before each commit:
+#   uv tool install pre-commit && pre-commit install -t pre-commit -t commit-msg
+repos:
+  - repo: local
+    hooks:
+      - id: checks
+        name: scripts/checks.sh
+        entry: sh scripts/checks.sh
+        language: system
+        pass_filenames: false
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml>=6"]
+# ///
+"""The Brain pull workflow's gate: what changed in the sources the vault follows.
+
+Template-owned: template-obsidian; changes come through `copier update` (its decision
+0001). A source is followed by `🛰️ Subscriptions.md` (its
+`subscriptions:` property, `source` and `follow`), or by a note naming it in `repos:`, an
+implicit `follow: [everything]` that a subscription replaces. The gate asks the GitHub API
+what changed in each part followed since a date, writes that per source with the notes
+naming it, and prints the changed sources. A malformed subscription list exits 2, a failed
+API call 1 (so the next run retries the same window); a source it can't find is a warning.
+
+    uv run scripts/brain-pull-gate.py SINCE OUT_FILE [--vault DIR]
+    uv run scripts/brain-pull-gate.py --list [--vault DIR]    # what is followed, no API calls
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+SUBSCRIPTIONS = "🛰️ Subscriptions.md"
+REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+WIKI = re.compile(r"^wiki:([A-Za-z0-9_.-]+)$")
+KINDS = {"everything", "releases", "design-records"}
+SHOWN = 100  # items listed per kind; the rest are counted, and Claude reads further
+
+
+def notes(vault: Path) -> list[Path]:
+    """The vault's notes as git sees them, without dot-folders and _templates/."""
+    out = subprocess.run(
+        ["git", "ls-files", "-co", "--exclude-standard", "-z", "--", "*.md"],
+        cwd=vault, capture_output=True, text=True, check=True,
+    ).stdout  # fmt: skip
+    rels = [Path(p) for p in out.split("\0") if p]
+    return [vault / p for p in rels if not any(x.startswith(".") or x == "_templates" for x in p.parts)]
+
+
+def front_matter(path: Path) -> dict[str, object]:
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n") or (end := text.find("\n---", 4)) == -1:
+        return {}
+    try:
+        data = yaml.safe_load(text[4:end])
+    except yaml.YAMLError:
+        return {}  # check-vault.py reports it
+    return data if isinstance(data, dict) else {}
+
+
+def notes_by_repo(vault: Path) -> dict[str, list[str]]:
+    """owner/name -> the notes naming it in `repos:` (one string or a list)."""
+    found: dict[str, list[str]] = {}
+    for path in sorted(notes(vault)):
+        value = front_matter(path).get("repos")
+        for entry in [value] if isinstance(value, str) else value if isinstance(value, list) else []:
+            if isinstance(entry, str) and REPO.match(entry.strip()):
+                found.setdefault(entry.strip(), []).append(path.stem)
+            elif entry:
+                print(f"warning: {path.relative_to(vault)}: repos entry {entry!r} is not owner/name", file=sys.stderr)
+    return found
+
+
+def subscriptions(vault: Path, named: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Source -> the parts followed. Raises ValueError on a malformed list."""
+    follow = {repo: ["everything"] for repo in named}
+    note = vault / SUBSCRIPTIONS
+    if not note.exists():
+        return follow
+    entries = front_matter(note).get("subscriptions") or []
+    if not isinstance(entries, list):
+        raise ValueError("`subscriptions` must be a list")
+    seen: set[str] = set()
+    for i, entry in enumerate(entries, 1):
+        source = entry.get("source") if isinstance(entry, dict) else None
+        kinds = entry.get("follow") if isinstance(entry, dict) else None
+        if not isinstance(source, str) or not REPO.match(source):
+            raise ValueError(f"entry {i}: `source` must be owner/name, got {source!r}")
+        if source in seen:
+            raise ValueError(f"entry {i}: {source} is listed twice")
+        seen.add(source)
+        if not isinstance(kinds, list) or not kinds:
+            raise ValueError(f"{source}: `follow` must be a non-empty list")
+        for kind in kinds:
+            if not isinstance(kind, str) or (kind not in KINDS and not WIKI.match(kind)):
+                raise ValueError(f"{source}: unknown part {kind!r} (everything, releases, design-records, wiki:<Page>)")
+        follow[source] = list(dict.fromkeys(kinds))
+    return follow
+
+
+def gh(path: str, paginate: bool = True) -> list[dict]:
+    cmd = ["gh", "api", *(["--paginate", "--slurp"] if paginate else []), path]
+    out = json.loads(subprocess.run(cmd, capture_output=True, text=True, check=True).stdout)
+    return [item for page in out for item in page] if paginate else out
+
+
+def commits(repo: str, since: str, path: str = "") -> list[str]:
+    query = f"repos/{repo}/commits?since={since}&per_page=100" + (f"&path={path}" if path else "")
+    return [f"{c['sha'][:7]} {c['commit']['message'].splitlines()[0]}" for c in gh(query)]
+
+
+def releases(repo: str, since: str) -> list[str]:
+    """Newest first, so one page covers any window shorter than 100 releases."""
+    found = gh(f"repos/{repo}/releases?per_page=100", paginate=False)
+    return [r["tag_name"] for r in found if (r.get("published_at") or "") > since]
+
+
+def changes(repo: str, kinds: list[str], since: str) -> dict[str, list[str]]:
+    """Part -> what changed in it, for the parts with any change."""
+    found = {}
+    for kind in kinds:
+        if kind == "everything":
+            items = commits(repo, since) + [f"release {t}" for t in releases(repo, since)]
+        elif kind == "releases":
+            items = releases(repo, since)
+        elif kind == "design-records":
+            items = commits(repo, since, "docs/design")
+        else:
+            items = commits(repo, since, f"docs/wiki/{WIKI.match(kind).group(1)}.md")  # type: ignore[union-attr]
+        if items:
+            found[kind] = items
+    return found
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("since", nargs="?", help="an ISO 8601 time, e.g. 2026-11-01T05:00:00Z")
+    parser.add_argument("out", nargs="?", type=Path, help="where to write what changed (Markdown)")
+    parser.add_argument("--list", action="store_true", help="print what is followed and stop")
+    parser.add_argument("--vault", default="[[ vault_dir ]]", help="the vault's folder (default: %(default)s)")
+    args = parser.parse_args()
+    if not args.list and not args.out:
+        parser.error("SINCE and OUT_FILE are required without --list")
+    vault = (Path(__file__).resolve().parents[1] / args.vault).resolve()
+    named = notes_by_repo(vault)
+    try:
+        follow = subscriptions(vault, named)
+    except ValueError as e:
+        print(f"::error file={args.vault}/{SUBSCRIPTIONS}::{e}", file=sys.stderr)
+        return 2
+    if args.list:
+        for repo, kinds in sorted(follow.items()):
+            print(f"{repo}: {', '.join(kinds)}")
+        return 0
+
+    lines, changed = [f"# What changed since {args.since}", ""], []
+    for repo, kinds in sorted(follow.items()):
+        try:
+            found = changes(repo, kinds, args.since)
+        except subprocess.CalledProcessError as e:
+            if "HTTP 404" in e.stderr:
+                print(f"::warning::{repo}: not found (private, renamed or gone?)", file=sys.stderr)
+                continue
+            print(f"::error::{repo}: {e.stderr.strip()}", file=sys.stderr)
+            return 1
+        if not found:
+            continue
+        changed.append(repo)
+        covered = ", ".join(f"`{n}`" for n in named.get(repo, [])) or "none (open an issue, don't add a note)"
+        lines += [f"## {repo}", "", f"Notes naming it in `repos:`: {covered}", ""]
+        for kind, items in found.items():
+            lines.append(f"- **{kind}** ({len(items)}):")
+            lines += [f"  - {item}" for item in items[:SHOWN]]
+            if len(items) > SHOWN:
+                lines.append(f"  - and {len(items) - SHOWN} more: read them with `gh api`")
+        lines.append("")
+    args.out.write_text("\n".join(lines), encoding="utf-8")
+    print(" ".join(changed))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

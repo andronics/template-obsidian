@@ -1,0 +1,114 @@
+# template-obsidian: the stack overlay for a brain, an Obsidian vault of notes. It goes on
+# top of template-base, whose answers it reads (it never asks base's questions again):
+#
+#   uvx copier copy --trust gh:andronics/template-base my-brain
+#   uvx copier copy --trust gh:andronics/template-obsidian my-brain
+#
+# As the stack overlay it fills base's slots (stack-ci.yml, .agents/stack.md, .gitignore,
+# .pre-commit-config.yaml, .claude/settings.json, README.md, dependabot.yml) and adds
+# obsidian-* workflows and scripts/checks.d/20-obsidian.sh (docs/decisions/0001).
+
+_min_copier_version: "9.6.0"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.stack-obsidian.yml
+_external_data:
+  base: .copier-answers.base.yml
+
+# GitHub Actions uses ${{ }}, so Jinja uses [[ ]] / [% %] instead.
+_envops:
+  variable_start_string: "[["
+  variable_end_string: "]]"
+  block_start_string: "[%"
+  block_end_string: "%]"
+  comment_start_string: "[#!"
+  comment_end_string: "!#]"
+  keep_trailing_newline: true
+  trim_blocks: true
+  lstrip_blocks: true
+
+# Written once, then the project's: `copier update` never touches them again. A brain's
+# README.md, its own checks, and its vault's notes and shared settings are its own.
+_skip_if_exists:
+  - README.md
+  - scripts/check.sh
+  - "[[ vault ]]🏠 Home.md"
+  - "[[ vault ]]📐 Conventions.md"
+  - "[[ vault ]]_attachments/**"
+  - "[[ vault ]].obsidian/app.json"
+  - "[[ vault ]].obsidian/templates.json"
+  # The list a brain follows is its own; the template only seeds it.
+  - "[[ vault ]]🛰️ Subscriptions.md"
+
+_message_after_copy: |
+  [[ project_name ]] is a brain. Next:
+    cd [[ _copier_conf.dst_path ]]
+    git add -A && git commit -m "chore: initial commit from template-base and template-obsidian"
+
+  Then open [[ vault_dir ]] in Obsidian and start at 🏠 Home.
+
+_message_after_update: |
+  Next: resolve any <<<<<<< markers, run sh scripts/post-update.sh, review git diff and commit.
+
+# ---------------------------------------------------------------- questions
+
+vault_dir:
+  type: str
+  help: The vault's folder, relative to the repository root ("." for the root itself)
+  default: vault
+  validator: >-
+    [% if not (vault_dir | regex_search('^(\\.|[A-Za-z0-9_][A-Za-z0-9 _-]*)$')) %]
+    One folder name, or "." for the repository root
+    [% endif %]
+
+# A daily Claude Code run that keeps notes current with what they follow, in one PR.
+brain_pull:
+  type: bool
+  help: Add the Brain pull workflow? Daily, Claude Code updates the notes whose `repos:` property names a GitHub repository that changed (or the parts of it a `🛰️ Subscriptions` note follows), in one PR for review. Needs the CLAUDE_CODE_OAUTH_TOKEN secret and a repository setting (template-obsidian's README)
+  default: false
+
+# ------------------------------------------------- derived (never asked)
+
+# Base must be applied first, at v1.0.0 or later: its answers file is where this overlay
+# reads the project's identity. Fails the copy or update with the reason otherwise.
+base_check:
+  type: str
+  when: false
+  default: >-
+    [%- set c = _external_data.base._commit | default('') | string -%]
+    [%- set v = (c | regex_search('^v?(\\d+)\\.(\\d+)\\.(\\d+)', '\\1', '\\2', '\\3')) -%]
+    [%- if not c -%][[ {}['template-obsidian needs template-base first: .copier-answers.base.yml is missing'].stop ]]
+    [%- elif not v or (v | map('int') | list) < [1, 0, 0] -%][[ {}['template-obsidian needs template-base v1.0.0 or later; this project has ' ~ c].stop ]]
+    [%- else -%]ok[%- endif -%]
+
+# Base's answers, read through _external_data (never asked here).
+project_name:
+  type: str
+  default: "[[ _external_data.base.project_name ]]"
+  when: false
+
+description:
+  type: str
+  default: "[[ _external_data.base.description ]]"
+  when: false
+
+github_owner:
+  type: str
+  default: "[[ _external_data.base.github_owner ]]"
+  when: false
+
+license:
+  type: str
+  default: "[[ _external_data.base.license ]]"
+  when: false
+
+copyright_holder:
+  type: str
+  default: "[[ _external_data.base.copyright_holder | default(_external_data.base.github_owner) ]]"
+  when: false
+
+# The vault's path prefix: '' at the root, else 'knowledge/'.
+vault:
+  type: str
+  default: "[[ '' if vault_dir == '.' else vault_dir ~ '/' ]]"
+  when: false

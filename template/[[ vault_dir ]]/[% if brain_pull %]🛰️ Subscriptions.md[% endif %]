@@ -1,0 +1,18 @@
+---
+kind: subscriptions
+tags: [subscriptions]
+subscriptions: []
+---
+%% Yours: copier update never touches this note. The Brain pull workflow reads it daily and never edits it. Then delete this comment. %%
+
+What this brain follows, and how much of each source. A change in a part followed goes to Claude Code, which updates the notes naming the source in `repos:`, or opens an issue when no note does.
+
+A repository named in a note's `repos:` and not listed here follows `everything`; listing it here replaces that. `follow` takes `everything`, `releases`, `design-records` (commits under `docs/design/`) or `"wiki:<Page>"` (commits to `docs/wiki/<Page>.md`). For example:
+
+```yaml
+subscriptions:
+  - source: owner/busy-repo
+    follow: [design-records, releases]
+  - source: owner/other-repo
+    follow: ["wiki:Security"]
+```

@@ -1,0 +1,45 @@
+# The design index: every record in decisions/, by number (template-obsidian decision 0001).
+# Template-owned: copier update replaces it. Want another view? Add a base of your own.
+filters:
+  and:
+    - file.inFolder("decisions")
+    - kind == "decision"
+properties:
+  note.number:
+    displayName: "#"
+  file.name:
+    displayName: Record
+  note.status:
+    displayName: Status
+  note.date:
+    displayName: Date
+  note.summary:
+    displayName: Summary
+views:
+  - type: table
+    name: Decisions
+    filters:
+      and:
+        - status != "rejected"
+    order:
+      - note.number
+      - file.name
+      - note.status
+      - note.date
+      - note.summary
+    sort:
+      - property: note.number
+        direction: ASC
+  - type: table
+    name: Decided against
+    filters:
+      and:
+        - status == "rejected"
+    order:
+      - note.number
+      - file.name
+      - note.date
+      - note.summary
+    sort:
+      - property: note.number
+        direction: ASC

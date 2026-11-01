@@ -1,0 +1,4 @@
+# GitHub's About box for this repository.
+description = "Copier stack overlay for brains: an Obsidian vault on template-base, with checks and the Brain pull workflow"
+homepage = ""
+topics = ["copier", "copier-template", "obsidian", "obsidian-vault", "template"]

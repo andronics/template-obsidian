@@ -1,0 +1,26 @@
+# Stack: Obsidian
+
+A brain: notes, not code. An Obsidian vault: start at `[[ vault ]]🏠 Home.md`, read only the notes the task needs, and write them by `📐 Conventions`.
+
+## Don't read
+
+`[[ vault ]].obsidian/`, `[[ vault ]].trash/`, `[[ vault ]]_attachments/`.
+
+## Repository map
+
+| Path | What |
+|---|---|
+| `[[ vault_dir ]]` | The vault (embedded files: `_attachments/`) |
+| `[[ vault ]]decisions/`, `_templates/` | Design records, their index `Decisions.base` and template (T) |
+| `scripts/check.sh` | Own checks, the project's (not T); a stub until filled |
+
+## Conventions
+
+- **Links:** by note name, never by path.
+- **Design records:** `📝 NNNN Title.md` in `decisions/`, from the template: next number, `status: proposed`. A successor's `supersedes` and the old record's `superseded_by` link each other.
+- **`.obsidian/`:** never edit beyond `app.json` and `templates.json`.
+- **Workarounds** link their issue in the note.
+
+## Checks
+
+`sh scripts/checks.sh` runs `uv run scripts/check-vault.py` (front matter, embeds, design records) and `sh scripts/check.sh`.

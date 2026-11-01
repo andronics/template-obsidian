@@ -1,0 +1,27 @@
+# Obsidian's per-client state and cache, wherever the vault is (template-obsidian decision 0001)
+**/.obsidian/workspace*.json
+**/.obsidian/cache
+**/.trash/
+
+# Local knowledge graphs (graphify): rebuilt locally, never committed
+.graphify/
+graphify-out/
+
+# Secrets and local state: never committed
+.env
+.env.*
+!.env.example
+secrets/
+private/
+*.pem
+*.key
+/data/
+
+# Editors and AI assistants' local files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+.claude/settings.local.json
+CLAUDE.local.md

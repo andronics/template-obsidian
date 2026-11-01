@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml>=6"]
+# ///
+"""Check the Obsidian vault for what is always broken or owned by template-obsidian.
+
+Template-owned: template-obsidian; changes come through `copier update` (its decision
+0001). It checks:
+
+  - every note's front matter parses (YAML, a mapping)
+  - every embed (an exclamation mark before a wikilink) resolves to a file in the vault;
+    a plain link to a missing note is fine: it marks the next note to write
+  - every design record in decisions/ has the properties, a valid status, a unique
+    number matching its name, the five headings, and supersedes/superseded_by links
+    that resolve and point at each other
+
+The AI files' context budget is template-base's check (scripts/base-contract.py).
+
+    uv run scripts/check-vault.py [--vault DIR]
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+STATUSES = {"proposed", "approved", "implemented", "superseded", "rejected"}
+PROPERTIES = ["kind", "number", "status", "date", "authors", "summary", "supersedes", "superseded_by", "tags"]
+HEADINGS = ["Context", "Decision", "Alternatives considered", "Consequences", "Open questions"]
+RECORD_NAME = re.compile(r"^📝 (\d{4}) \S")
+EMBED = re.compile(r"!\[\[([^\]]+)\]\]")
+LINK = re.compile(r"^\[\[([^\]|#^]+)[^\]]*\]\]$")
+CODE = re.compile(r"^(`{3,}|~{3,}).*?^\1|`[^`\n]+`", re.M | re.S)
+
+
+def vault_files(vault: Path) -> list[Path]:
+    """The vault's files as git sees them (tracked, or new and not ignored), without
+    dot-folders such as .obsidian/ and .trash/, which Obsidian doesn't index either."""
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "-co", "--exclude-standard", "-z", "--", "."],
+            cwd=vault, capture_output=True, text=True, check=True,
+        ).stdout  # fmt: skip
+        paths = [vault / p for p in out.split("\0") if p]
+    except (OSError, subprocess.CalledProcessError):
+        paths = list(vault.rglob("*"))
+    return sorted(
+        p for p in paths
+        if p.is_file() and not any(part.startswith(".") for part in p.relative_to(vault).parts)
+    )  # fmt: skip
+
+
+def split_note(text: str) -> tuple[str | None, str]:
+    """Front matter (None if the note has none) and body."""
+    if not text.startswith("---\n"):
+        return None, text
+    end = text.find("\n---", 4)
+    if end == -1:
+        return text[4:], ""
+    return text[4:end], text[end + 4 :]
+
+
+def resolves(target: str, names: set[str]) -> bool:
+    """Obsidian's resolution, simplified: a vault path or a path suffix, `.md` implied."""
+    target = target.split("|")[0].split("#")[0].split("^")[0].strip().lower()
+    if not target:
+        return True  # a heading or block in the same note
+    if not Path(target).suffix:
+        target += ".md"
+    return target in names or any(name.endswith("/" + target) for name in names)
+
+
+def link_name(value: object) -> str | None:
+    match = LINK.match(value.strip()) if isinstance(value, str) else None
+    return match.group(1).strip() if match else None
+
+
+def check_records(records: dict[Path, dict], bodies: dict[Path, str], errors: list[str]) -> None:
+    by_name = {path.stem: path for path in records}
+    numbers: dict[int, Path] = {}
+    for path, props in records.items():
+        where = f"error: {path}"
+        if missing := [p for p in PROPERTIES if p not in props]:
+            errors.append(f"{where}: missing properties: {', '.join(missing)}")
+            continue
+        if props["kind"] != "decision":
+            errors.append(f"{where}: kind is {props['kind']!r}, not 'decision'")
+        if props["status"] not in STATUSES:
+            errors.append(f"{where}: status {props['status']!r} is not one of {', '.join(sorted(STATUSES))}")
+        number = props["number"]
+        name = RECORD_NAME.match(path.stem)
+        if not isinstance(number, int) or isinstance(number, bool):
+            errors.append(f"{where}: number {number!r} is not a whole number")
+        elif not name or int(name.group(1)) != number:
+            errors.append(f"{where}: the name must be '📝 {number:04d} Title In Title Case'")
+        elif number in numbers:
+            errors.append(f"{where}: number {number} is also {numbers[number].name}")
+        else:
+            numbers[number] = path
+        headings = {re.sub(r"^[^\w]+", "", h).strip() for h in re.findall(r"^## (.+)$", bodies[path], re.M)}
+        if missing := [h for h in HEADINGS if h not in headings]:
+            errors.append(f"{where}: missing headings: {', '.join(missing)}")
+
+        supersedes = props["supersedes"] or []
+        if not isinstance(supersedes, list):
+            supersedes = [supersedes]
+        for value in supersedes:
+            old = by_name.get(link_name(value) or "")
+            if not old:
+                errors.append(f"{where}: supersedes {value!r}, which is not a design record")
+            elif link_name(records[old].get("superseded_by")) != path.stem:
+                errors.append(f"{where}: supersedes {old.stem}, whose superseded_by doesn't link back")
+        if (value := props["superseded_by"]) is not None:
+            new = by_name.get(link_name(value) or "")
+            if not new:
+                errors.append(f"{where}: superseded_by {value!r}, which is not a design record")
+                continue
+            back = records[new].get("supersedes") or []
+            if path.stem not in {link_name(v) for v in (back if isinstance(back, list) else [back])}:
+                errors.append(f"{where}: superseded by {new.stem}, whose supersedes doesn't link back")
+            if props["status"] != "superseded":
+                errors.append(f"{where}: superseded_by is set, so status must be 'superseded'")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--vault", default="[[ vault_dir ]]", help="the vault's folder (default: %(default)s)")
+    args = parser.parse_args()
+    root = Path(__file__).resolve().parents[1]
+    vault = (root / args.vault).resolve()
+    errors: list[str] = []
+
+    files = vault_files(vault)
+    names = {str(p.relative_to(vault)).lower() for p in files}
+    records: dict[Path, dict] = {}
+    bodies: dict[Path, str] = {}
+    for path in (p for p in files if p.suffix == ".md"):
+        rel = path.relative_to(vault)
+        front, body = split_note(path.read_text(encoding="utf-8"))
+        props: object = {}
+        if front is not None:
+            try:
+                props = yaml.safe_load(front) or {}
+            except yaml.YAMLError as e:
+                errors.append(f"error: {rel}: front matter is not valid YAML: {e}".splitlines()[0])
+                continue
+            if not isinstance(props, dict):
+                errors.append(f"error: {rel}: front matter is not a mapping of properties")
+                continue
+        for target in EMBED.findall(CODE.sub("", body)):
+            if not resolves(target, names):
+                errors.append(f"error: {rel}: embeds a missing file: {target}")
+        if rel.parts[0] == "decisions":
+            records[rel] = props  # type: ignore[assignment]
+            bodies[rel] = body
+    check_records(records, bodies, errors)
+
+    # Quiet on a pass: an assistant reads this output on every run (template-base decision 0001).
+    print("\n".join(errors) if errors else f"check-vault OK: {len(names)} files, {len(records)} design records")
+    return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
