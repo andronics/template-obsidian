@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from stacking import ROOT, commit, copy, sibling, stage  # noqa: E402
 
+# The base version this overlay needs, and its tests render (staged copies are tagged with it).
+BASE_VERSION = "v2.0.0"
 BASE = {"project_name": "demo", "description": "A demo brain", "github_owner": "metalayerlab"}
 BRAIN = {"vault_dir": "knowledge", "brain_pull": True}
 
@@ -19,7 +21,7 @@ def base_src(tmp_path_factory: pytest.TempPathFactory) -> Path:
     base = sibling("template-base", "TEMPLATE_BASE")
     if base is None:
         pytest.fail("template-base must be checked out next to this repository, or set TEMPLATE_BASE")
-    return stage(base, tmp_path_factory.mktemp("src") / "template-base")
+    return stage(base, tmp_path_factory.mktemp("src") / "template-base", tag=BASE_VERSION)
 
 
 @pytest.fixture(scope="session")
