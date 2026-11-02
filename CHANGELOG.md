@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.3](https://github.com/andronics/template-obsidian/compare/v1.2.2...v1.2.3) (2026-11-02)
+
+
+### 🐛 Bug Fixes
+
+* the PR template asks whether a PR was generated, not by what ([#20](https://github.com/andronics/template-obsidian/issues/20)) ([2a2e401](https://github.com/andronics/template-obsidian/commit/2a2e401b778e1d76cd291cd5c80e6a4b156a73b2))
+
 ## [1.2.2](https://github.com/andronics/template-obsidian/compare/v1.2.1...v1.2.2) (2026-11-02)
 
 
