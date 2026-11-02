@@ -252,6 +252,50 @@ def test_brain_pull_workflow(project: Path) -> None:
         assert needed in run, needed
 
 
+def propose_steps(project: Path) -> dict[str, dict]:
+    flow = yaml.safe_load((project / PULL).read_text())
+    return {s.get("id") or s.get("name") or s["uses"].split("@")[0]: s for s in flow["jobs"]["propose"]["steps"]}
+
+
+def test_brain_pull_token(project: Path) -> None:
+    """Scout's token when SCOUT_APP_CLIENT_ID is set, else GITHUB_TOKEN, for the push, PR, issues and dispatch."""
+    steps = propose_steps(project)
+    scout = steps["scout"]
+    assert scout["if"] == "vars.SCOUT_APP_CLIENT_ID != ''"
+    assert scout["uses"].startswith("actions/create-github-app-token@")
+    assert scout["with"]["client-id"] == "${{ vars.SCOUT_APP_CLIENT_ID }}"
+    assert scout["with"]["private-key"] == "${{ secrets.SCOUT_APP_PRIVATE_KEY }}"
+    for perm in ["contents", "pull-requests", "issues", "actions"]:
+        assert scout["with"][f"permission-{perm}"] == "write", perm
+    token = "${{ steps.scout.outputs.token || github.token }}"
+    assert steps["actions/checkout"]["with"]["token"] == token  # the push uses checkout's credentials
+    names = list(steps)
+    assert names.index("scout") < names.index("actions/checkout")
+    env = steps["Commit, push and open the PR"]["env"]
+    assert env["GH_TOKEN"] == token  # the PR, the issues and the dispatch
+    assert env["DISPATCH_CI"] == "${{ steps.scout.outputs.token == '' }}"
+
+
+@pytest.mark.parametrize(("dispatch", "dispatched"), [("true", True), ("false", False)], ids=["github-token", "scout"])
+def test_brain_pull_dispatches_ci_only_without_scout(dispatch: str, dispatched: bool, project: Path, tmp_path: Path) -> None:
+    step = propose_steps(project)["Commit, push and open the PR"]
+    bin_, out = tmp_path / "bin", tmp_path / "out"
+    bin_.mkdir()
+    out.mkdir()
+    log = tmp_path / "calls"
+    for tool in ["gh", "git", "uv"]:
+        (bin_ / tool).write_text(f'#!/bin/sh\necho "{tool} $*" >> "{log}"\n')
+        (bin_ / tool).chmod(0o755)
+    (out / "vault.patch").write_text("x\n")
+    env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "OUT": str(out), "BRANCH": "brain-pull/2026-11-02",
+           "REUSE": "false", "REPO": "o/r", "GH_TOKEN": "t", "DISPATCH_CI": dispatch}  # fmt: skip
+    result = subprocess.run(["bash", "-c", step["run"]], cwd=tmp_path, capture_output=True, text=True, env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = log.read_text()
+    assert "git push -q -u origin brain-pull/2026-11-02" in calls and "gh pr create" in calls
+    assert ("gh workflow run base-ci.yml" in calls) is dispatched
+
+
 def scope_check(project: Path, out: Path, prefix: str) -> subprocess.CompletedProcess[str]:
     flow = yaml.safe_load((project / PULL).read_text())
     step = next(s for s in flow["jobs"]["propose"]["steps"] if s.get("name") == "The patch only edits notes")
