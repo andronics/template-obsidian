@@ -44,8 +44,14 @@ history. The old records are not imported; this record rebuilds what still appli
   changed since the last successful run on `main` in the sources the vault follows: the `🛰️ Subscriptions`
   note, plus notes' `repos:` as an implicit `everything`. Claude Code then updates those notes with a
   read-only token. A separate job checks that the patch only edits existing notes in the vault, and opens
-  one PR labelled `brain-pull`, then dispatches `base-ci.yml` on it. It does nothing without the
+  one PR labelled `brain-pull`, and files up to three issues. It does nothing without the
   `CLAUDE_CODE_OAUTH_TOKEN` secret.
+- **Scout, the brain's actor.** When the brain has the `SCOUT_APP_CLIENT_ID` variable and the
+  `SCOUT_APP_PRIVATE_KEY` secret, the propose job mints a token for the Scout GitHub App (contents,
+  pull-requests, issues and actions write) and pushes, opens the PR and files the issues as Scout. Scout's
+  push runs CI on the PR by itself. Without the variable it uses `GITHUB_TOKEN`, whose push triggers no
+  workflows, so it dispatches `base-ci.yml` on the branch. Same shape as template-base's `template-update.yml`:
+  an App when its variable is set, else `GITHUB_TOKEN`.
 
 ## Alternatives considered
 

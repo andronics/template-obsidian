@@ -27,6 +27,10 @@ until then the workflow does nothing), and allow Actions to open PRs (Settings â
 GitHub Actions to create and approve pull requests**). `scripts/repo-metadata.py` doesn't set it: it also lets
 workflows approve PRs, so turn it on knowingly.
 
+Optionally, let the PR come from Scout, the brain's GitHub App (contents, pull-requests, issues and actions
+write): set the `SCOUT_APP_CLIENT_ID` variable and the `SCOUT_APP_PRIVATE_KEY` secret. Its push runs CI on the
+PR by itself; without it the workflow pushes with `GITHUB_TOKEN` and dispatches `base-ci.yml` by hand.
+
 ## Where this came from
 
 Built from [metalayerlab/project-template](https://github.com/metalayerlab/project-template) `v0.1.23`'s
