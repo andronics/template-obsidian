@@ -1,5 +1,5 @@
 # template-obsidian's own CI: render template-base at its latest, then this overlay,
-# and run the brain's checks and the ported brain tests (tests/).
+# and run the brain's checks, the ported brain tests and template-base's contract cases (tests/).
 name: Template CI
 
 on:

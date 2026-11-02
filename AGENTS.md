@@ -11,7 +11,7 @@ plus base's `AGENTS.md`. Why: `docs/decisions/0001-obsidian-overlay.md` and temp
 |---|---|
 | `copier.yml` | `vault_dir`, `brain_pull`; base's answers recorded as `base_answers`; the base version check |
 | `template/` | Rendered into the project, over base: the slots, `obsidian-*` workflows, `scripts/checks.d/20-obsidian.sh`, the vault seeds |
-| `tests/` | Renders base (`../template-base` or `$TEMPLATE_BASE`) then this overlay, and checks the brain |
+| `tests/` | Renders base (`../template-base` or `$TEMPLATE_BASE`) then this overlay, and checks the brain; `test_contract.py` reruns base's contract cases on it |
 | `docs/decisions/` | Design records; `README.md` is the index |
 
 ## The rules of the stack
