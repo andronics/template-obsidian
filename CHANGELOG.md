@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/andronics/template-obsidian/compare/v1.1.3...v1.2.0) (2026-11-02)
+
+
+### ✨ Features
+
+* brain pull opens its PR as the Scout App when SCOUT_APP_CLIENT_ID is set ([#14](https://github.com/andronics/template-obsidian/issues/14)) ([7b8b850](https://github.com/andronics/template-obsidian/commit/7b8b85022e5a4b0d9e9d6ffb2ba72dd55b1e5173))
+
 ## [1.1.3](https://github.com/andronics/template-obsidian/compare/v1.1.2...v1.1.3) (2026-11-02)
 
 
