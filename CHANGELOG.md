@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/andronics/template-obsidian/compare/v1.2.0...v1.2.1) (2026-11-02)
+
+
+### 🐛 Bug Fixes
+
+* ignore Python caches in a brain ([#16](https://github.com/andronics/template-obsidian/issues/16)) ([a8db310](https://github.com/andronics/template-obsidian/commit/a8db310870d5e4a295c7c6c1a248d3ed5169d356))
+
 ## [1.2.0](https://github.com/andronics/template-obsidian/compare/v1.1.3...v1.2.0) (2026-11-02)
 
 
