@@ -6,6 +6,7 @@ directories, without `.copier-answers.base.yml`, so the overlay reads base's ans
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -51,3 +52,17 @@ def test_update_keeps_base_answers(base_src: Path, tmp_path: Path) -> None:
     assert not list(project.rglob("*.rej"))
     result = checks(commit(project))
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_recopy_message(base_src: Path, obsidian_src: Path, tmp_path: Path) -> None:
+    """A recopy prints the copy message (issue #9): it must not tell an existing brain to make its first commit."""
+    project = tmp_path / "demo"
+    copy(base_src, project, BASE)
+    copy(obsidian_src, project, BRAIN)
+    commit(project)
+    recopy = subprocess.run([sys.executable, "-m", "copier", "recopy", "-a", ".copier-answers.stack-obsidian.yml",
+                             "--trust", "--skip-tasks", "--defaults", "--overwrite"],
+                            cwd=project, capture_output=True, text=True, check=True)  # fmt: skip
+    lines = recopy.stderr.splitlines()
+    assert any(line.strip().startswith("A recopy: run sh scripts/post-update.sh") for line in lines), recopy.stderr
+    assert all(line.strip().startswith("A new brain:") for line in lines if "initial commit" in line), recopy.stderr
