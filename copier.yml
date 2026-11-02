@@ -40,12 +40,12 @@ _skip_if_exists:
   # The list a brain follows is its own; the template only seeds it.
   - "[[ vault ]]🛰️ Subscriptions.md"
 
+# Copier runs a recopy as a copy and gives the message nothing to tell them apart, so it covers both.
 _message_after_copy: |
-  [[ project_name ]] is a brain. Next:
-    cd [[ _copier_conf.dst_path ]]
-    git add -A && git commit -m "chore: initial commit from template-base and template-obsidian"
-
-  Then open [[ vault_dir ]] in Obsidian and start at 🏠 Home.
+  [[ project_name ]] is a brain. Next, in [[ _copier_conf.dst_path ]]:
+    A new brain: git add -A && git commit -m "chore: initial commit from template-base and template-obsidian",
+    then open [[ vault_dir ]] in Obsidian and start at 🏠 Home.
+    A recopy: run sh scripts/post-update.sh, restore your edits from git diff and commit.
 
 _message_after_update: |
   Next: resolve any <<<<<<< markers, run sh scripts/post-update.sh, review git diff and commit.
