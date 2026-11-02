@@ -14,10 +14,13 @@ history. The old records are not imported; this record rebuilds what still appli
 
 ## Decision
 
-- **A brain is base + this overlay.** It asks only `vault_dir` (default `knowledge`, `.` for the root; one
+- **A brain is base + this overlay.** It asks only `vault_dir` (default `vault`, `.` for the root; one
   folder name) and `brain_pull` (default off). It reads `project_name`, `description`, `github_owner`,
   `license` and `copyright_holder` from `.copier-answers.base.yml`, writes
-  `.copier-answers.stack-obsidian.yml`, and fails unless base is `v1.0.0` or later.
+  `.copier-answers.stack-obsidian.yml`, and fails unless base is `v1.0.0` or later. It records base's
+  answers there as `base_answers` and its templates read only that, because `copier update` replays each
+  version without base's answers file (issue #1, template-base's decision 0001; `tests/test_update.py`).
+  Brains made with `v1.1.0` or earlier can't replay it: their first update to this fix is a `copier recopy`.
 - **The vault is the wiki; design records are notes.** Records are `📝 NNNN Title.md` in
   `[vault_dir]/decisions/`, from `_templates/📝 Design Record.md`, indexed by `Decisions.base`. They have the
   properties `kind, number, status, date, authors, summary, supersedes, superseded_by, tags`, the five headings,

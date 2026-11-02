@@ -9,14 +9,15 @@ plus base's `AGENTS.md`. Why: `docs/decisions/0001-obsidian-overlay.md` and temp
 
 | Path | What |
 |---|---|
-| `copier.yml` | `vault_dir`, `brain_pull`; base's answers through `_external_data`; the base version check |
+| `copier.yml` | `vault_dir`, `brain_pull`; base's answers recorded as `base_answers`; the base version check |
 | `template/` | Rendered into the project, over base: the slots, `obsidian-*` workflows, `scripts/checks.d/20-obsidian.sh`, the vault seeds |
 | `tests/` | Renders base (`../template-base` or `$TEMPLATE_BASE`) then this overlay, and checks the brain |
 | `docs/decisions/` | Design records; `README.md` is the index |
 
 ## The rules of the stack
 
-- **Never ask base's questions.** Read them from `_external_data.base`.
+- **Never ask base's questions.** Read them through `base_answers`, never `_external_data` directly:
+  `copier update` replays without `.copier-answers.base.yml` (`tests/test_update.py`).
 - **Fill every slot base defines**, with every entry base requires (`scripts/checks.d/00-base.sh` checks them).
 - **Own files by name:** workflows `obsidian-*`, drop-ins `NN-obsidian*.sh`, each marked `Template-owned: template-obsidian`.
 - Never write a file base owns. A change base needs goes to template-base as an issue.
