@@ -111,7 +111,8 @@ def test_brain_keeps_guard_rails_only(project: Path) -> None:
     files = [p for p in files if str(p.relative_to(project)) not in PULL_FILES]
     text = "\n".join(p.read_text(errors="ignore") for p in files)
     assert not re.search(r"check-wiki|release-please|docs/wiki|docs/design|markdownlint", text)
-    assert "**/.obsidian/workspace*.json" in (project / ".gitignore").read_text()
+    ignored = (project / ".gitignore").read_text().splitlines()
+    assert {"**/.obsidian/workspace*.json", "__pycache__/", "*.pyc"} <= set(ignored)
 
 
 def test_stack_md(project: Path) -> None:
