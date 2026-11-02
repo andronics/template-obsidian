@@ -30,7 +30,9 @@ history. The old records are not imported; this record rebuilds what still appli
   be in AGENTS.md); `stack-ci.yml` (one empty job: everything runs in `checks.d`); `.gitignore` (Obsidian's
   per-client state, base's required entries, `private/`); `.pre-commit-config.yaml` (`scripts/checks.sh`,
   gitleaks); `.claude/settings.json` (base's permissions, plus the vault check and a `.trash/` read deny);
-  `README.md`; `.github/dependabot.yml` (GitHub Actions only).
+  `README.md`; `.github/dependabot.yml` (GitHub Actions only); `.github/pull_request_template.md` and
+  `.github/ISSUE_TEMPLATE/config.yml` (base's former generic versions: a brain has no code checklist or
+  Documentation link).
 - **Owned by the brain once written** (`_skip_if_exists`): `README.md`, `scripts/check.sh`, `🏠 Home`,
   `📐 Conventions`, `_attachments/`, `.obsidian/app.json` and `templates.json`, and `🛰️ Subscriptions`.
   The design index and the record template keep receiving updates.
