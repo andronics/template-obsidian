@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/andronics/template-obsidian/compare/v1.2.1...v1.2.2) (2026-11-02)
+
+
+### 📚 Documentation
+
+* the decision-record template asks for people only as authors ([#18](https://github.com/andronics/template-obsidian/issues/18)) ([750f238](https://github.com/andronics/template-obsidian/commit/750f2387d6ce0828398330c5d36f3dbd83053e97))
+
 ## [1.2.1](https://github.com/andronics/template-obsidian/compare/v1.2.0...v1.2.1) (2026-11-02)
 
 
