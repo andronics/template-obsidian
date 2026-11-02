@@ -33,9 +33,10 @@ def test_checks_pass(project: Path) -> None:
 
 
 def test_never_asks_base_questions() -> None:
-    """One answer, one place: base's identity is read through _external_data (decision 0001)."""
+    """One answer, one place: base's identity is recorded from _external_data as base_answers (decision 0001)."""
     config = yaml.safe_load((ROOT / "copier.yml").read_text())
-    asked = {k for k, v in config.items() if not k.startswith("_") and v.get("when") is not False}
+    asked = {k for k, v in config.items()
+             if not k.startswith("_") and v.get("when") is not False and v.get("ask") is not False}
     assert asked == {"vault_dir", "brain_pull"}
     assert config["_external_data"] == {"base": ".copier-answers.base.yml"}
     assert config["_answers_file"] == ".copier-answers.stack-obsidian.yml"
@@ -43,7 +44,9 @@ def test_never_asks_base_questions() -> None:
 
 def test_answers_files(project: Path) -> None:
     stack = yaml.safe_load((project / ".copier-answers.stack-obsidian.yml").read_text())
-    assert {k: v for k, v in stack.items() if not k.startswith("_")} == BRAIN
+    base_answers = {k: v for k, v in yaml.safe_load((project / ".copier-answers.base.yml").read_text()).items()
+                    if k not in ("_commit", "_src_path")}
+    assert {k: v for k, v in stack.items() if not k.startswith("_")} == {**BRAIN, "base_answers": base_answers}
     assert (project / ".copier-answers.base.yml").is_file() and not (project / ".copier-answers.yml").exists()
 
 

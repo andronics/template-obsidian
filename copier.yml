@@ -1,5 +1,5 @@
 # template-obsidian: the stack overlay for a brain, an Obsidian vault of notes. It goes on
-# top of template-base, whose answers it reads (it never asks base's questions again):
+# top of template-base, whose answers it records as base_answers (it never asks them again):
 #
 #   uvx copier copy --trust gh:andronics/template-base my-brain
 #   uvx copier copy --trust gh:andronics/template-obsidian my-brain
@@ -8,7 +8,7 @@
 # .pre-commit-config.yaml, .claude/settings.json, README.md, dependabot.yml) and adds
 # obsidian-* workflows and scripts/checks.d/20-obsidian.sh (docs/decisions/0001).
 
-_min_copier_version: "9.6.0"
+_min_copier_version: "9.19.0"
 _subdirectory: template
 _templates_suffix: .jinja
 _answers_file: .copier-answers.stack-obsidian.yml
@@ -69,45 +69,59 @@ brain_pull:
 
 # ------------------------------------------------- derived (never asked)
 
+# Base's answers, as templates read them (`base_answers.project_name`). `copier update` replays
+# each version in an empty directory, without .copier-answers.base.yml, so they're recorded in
+# this overlay's answers file. ask: false never prompts; the validator rejects a recorded copy
+# that differs from base's file, so Copier rereads the file and the next replay gets the new one.
+base_answers:
+  type: yaml
+  ask: false
+  default: "[[ dict(_external_data.base | items | rejectattr('0', 'in', ['_commit', '_src_path'])) | tojson ]]"
+  validator: >-
+    [% if _external_data.base and base_answers != dict(_external_data.base | items
+       | rejectattr('0', 'in', ['_commit', '_src_path'])) %]stale: reread .copier-answers.base.yml[% endif %]
+
 # Base must be applied first, at v1.0.0 or later: its answers file is where this overlay
-# reads the project's identity. Fails the copy or update with the reason otherwise.
+# reads the project's identity. Fails the copy or update with the reason otherwise. A replay
+# has no answers file, only the recorded base_answers; the real render beside it checks the file.
 base_check:
   type: str
   when: false
   default: >-
     [%- set c = _external_data.base._commit | default('') | string -%]
     [%- set v = (c | regex_search('^v?(\\d+)\\.(\\d+)\\.(\\d+)', '\\1', '\\2', '\\3')) -%]
-    [%- if not c -%][[ {}['template-obsidian needs template-base first: .copier-answers.base.yml is missing'].stop ]]
+    [%- if not _external_data.base and base_answers | default({}) -%]ok
+    [%- elif not c -%][[ {}['template-obsidian needs template-base first: .copier-answers.base.yml is missing'].stop ]]
     [%- elif not v or (v | map('int') | list) < [1, 0, 0] -%][[ {}['template-obsidian needs template-base v1.0.0 or later; this project has ' ~ c].stop ]]
     [%- else -%]ok[%- endif -%]
 
-# Base's answers, read through _external_data (never asked here).
+# Base's answers under their own names, for the templates.
 project_name:
   type: str
-  default: "[[ _external_data.base.project_name ]]"
+  default: "[[ base_answers.project_name ]]"
   when: false
 
 description:
   type: str
-  default: "[[ _external_data.base.description ]]"
+  default: "[[ base_answers.description ]]"
   when: false
 
 github_owner:
   type: str
-  default: "[[ _external_data.base.github_owner ]]"
+  default: "[[ base_answers.github_owner ]]"
   when: false
 
 license:
   type: str
-  default: "[[ _external_data.base.license ]]"
+  default: "[[ base_answers.license ]]"
   when: false
 
 copyright_holder:
   type: str
-  default: "[[ _external_data.base.copyright_holder | default(_external_data.base.github_owner) ]]"
+  default: "[[ base_answers.copyright_holder | default(base_answers.github_owner) ]]"
   when: false
 
-# The vault's path prefix: '' at the root, else 'knowledge/'.
+# The vault's path prefix: '' at the root, else 'vault/' (vault_dir and a slash).
 vault:
   type: str
   default: "[[ '' if vault_dir == '.' else vault_dir ~ '/' ]]"
