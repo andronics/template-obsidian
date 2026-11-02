@@ -29,6 +29,7 @@ As template-base: `[[ ]]`, `[% %]`, `[#! !#]`. Vault notes are copied verbatim (
 ## Rules
 
 - Keep the brain green: `uv run pytest`. Pin actions to SHAs. Never credit an AI. Never create tags or releases.
+- Pins are bumped by Renovate (template-base's decision 0002, `pin-bumps.yml`): don't hand-bump one unless it's urgent.
 - A vault seed is `_skip_if_exists`: changing it reaches new brains only.
 - Asking the user something? Give your recommendation and why. Reply tersely.
 
