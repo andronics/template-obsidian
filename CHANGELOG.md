@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/andronics/template-obsidian/compare/v1.1.1...v1.1.2) (2026-11-02)
+
+
+### 🐛 Bug Fixes
+
+* require template-base v2.0.0 or later ([#6](https://github.com/andronics/template-obsidian/issues/6)) ([0dc6c39](https://github.com/andronics/template-obsidian/commit/0dc6c3987680208bf7c30eba75dbb123a05bed75))
+
 ## [1.1.1](https://github.com/andronics/template-obsidian/compare/v1.1.0...v1.1.1) (2026-11-02)
 
 
