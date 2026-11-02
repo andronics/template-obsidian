@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.3](https://github.com/andronics/template-obsidian/compare/v1.1.2...v1.1.3) (2026-11-02)
+
+
+### 🐛 Bug Fixes
+
+* pin astral-sh/setup-uv v10.3.3 ([#10](https://github.com/andronics/template-obsidian/issues/10)) ([ae077ff](https://github.com/andronics/template-obsidian/commit/ae077ffb3cf3073a546a5a826809ad759b9e8720))
+* the copy message is true for a recopy too ([#11](https://github.com/andronics/template-obsidian/issues/11)) ([9b7b0e9](https://github.com/andronics/template-obsidian/commit/9b7b0e959d8e6ad2421e536d05984a65d0aa2394)), closes [#9](https://github.com/andronics/template-obsidian/issues/9)
+
 ## [1.1.2](https://github.com/andronics/template-obsidian/compare/v1.1.1...v1.1.2) (2026-11-02)
 
 
