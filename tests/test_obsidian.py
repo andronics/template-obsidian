@@ -135,6 +135,13 @@ VAULT_OWNERS = {
 }
 
 
+def test_pr_template_names_no_ai(project: Path) -> None:
+    """Commits, PRs and docs never credit an AI (AGENTS.md): the PR template asks if it was generated, not by what."""
+    text = (project / ".github/pull_request_template.md").read_text()
+    assert "- [ ] Generated: most of this was written by an AI assistant\n" in text
+    assert "tool and model" not in text
+
+
 def test_ownership(base_src: Path, obsidian_src: Path, tmp_path: Path) -> None:
     """copier update leaves a brain's README.md, own checks and seeded notes alone, and still
     updates the design index, the record template and the slots."""
