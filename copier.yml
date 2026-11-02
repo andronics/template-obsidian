@@ -81,9 +81,10 @@ base_answers:
     [% if _external_data.base and base_answers != dict(_external_data.base | items
        | rejectattr('0', 'in', ['_commit', '_src_path'])) %]stale: reread .copier-answers.base.yml[% endif %]
 
-# Base must be applied first, at v1.0.0 or later: its answers file is where this overlay
-# reads the project's identity. Fails the copy or update with the reason otherwise. A replay
-# has no answers file, only the recorded base_answers; the real render beside it checks the file.
+# Base must be applied first, at v2.0.0 or later: its answers file is where this overlay reads
+# the project's identity, and v1 writes the PR-template and issue-config files this overlay owns
+# (one owner per file). Fails the copy or update with the reason otherwise. A replay has no
+# answers file, only the recorded base_answers; the real render beside it checks the file.
 base_check:
   type: str
   when: false
@@ -92,7 +93,7 @@ base_check:
     [%- set v = (c | regex_search('^v?(\\d+)\\.(\\d+)\\.(\\d+)', '\\1', '\\2', '\\3')) -%]
     [%- if not _external_data.base and base_answers | default({}) -%]ok
     [%- elif not c -%][[ {}['template-obsidian needs template-base first: .copier-answers.base.yml is missing'].stop ]]
-    [%- elif not v or (v | map('int') | list) < [1, 0, 0] -%][[ {}['template-obsidian needs template-base v1.0.0 or later; this project has ' ~ c].stop ]]
+    [%- elif not v or (v | map('int') | list) < [2, 0, 0] -%][[ {}['template-obsidian needs template-base v2.0.0 or later; this project has ' ~ c].stop ]]
     [%- else -%]ok[%- endif -%]
 
 # Base's answers under their own names, for the templates.

@@ -57,7 +57,7 @@ def test_reads_base_answers(project: Path) -> None:
 
 @pytest.mark.parametrize(("base", "error"), [
     (None, "needs template-base first: .copier-answers.base.yml is missing"),
-    ("v0.9.0", "needs template-base v1.0.0 or later; this project has v0.9.0"),
+    ("v1.0.0", "needs template-base v2.0.0 or later; this project has v1.0.0"),
 ])  # fmt: skip
 def test_needs_base_first(base: str | None, error: str, obsidian_src: Path, base_src: Path, tmp_path: Path) -> None:
     """Base goes first, at the version the overlay needs; otherwise the copy fails and says why."""

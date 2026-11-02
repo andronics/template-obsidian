@@ -17,7 +17,8 @@ history. The old records are not imported; this record rebuilds what still appli
 - **A brain is base + this overlay.** It asks only `vault_dir` (default `vault`, `.` for the root; one
   folder name) and `brain_pull` (default off). It reads `project_name`, `description`, `github_owner`,
   `license` and `copyright_holder` from `.copier-answers.base.yml`, writes
-  `.copier-answers.stack-obsidian.yml`, and fails unless base is `v1.0.0` or later. It records base's
+  `.copier-answers.stack-obsidian.yml`, and fails unless base is `v2.0.0` or later
+  (v2.0.0 makes the PR template and issue-form config slots). It records base's
   answers there as `base_answers` and its templates read only that, because `copier update` replays each
   version without base's answers file (issue #1, template-base's decision 0001; `tests/test_update.py`).
   Brains made with `v1.1.0` or earlier can't replay it: their first update to this fix is a `copier recopy`.

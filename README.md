@@ -9,7 +9,7 @@ uvx copier copy --trust gh:andronics/template-obsidian my-brain
 ```
 
 It asks two questions, `vault_dir` (the vault's folder, `.` for the root) and `brain_pull`, and reads the
-rest from base's answers. It needs template-base `v1.0.0` or later.
+rest from base's answers. It needs template-base `v2.0.0` or later.
 
 ## What it adds
 
