@@ -1,4 +1,5 @@
-# The design index: every record in decisions/, by number (template-obsidian decision 0001).
+# The design index: every record in decisions/, by number, and what superseded it in whole or in part
+# (template-obsidian decisions 0001 and 0002).
 # Template-owned: copier update replaces it. Want another view? Add a base of your own.
 filters:
   and:
@@ -15,6 +16,10 @@ properties:
     displayName: Date
   note.summary:
     displayName: Summary
+  note.superseded_by:
+    displayName: Superseded by
+  note.partially_superseded_by:
+    displayName: Partly superseded by
 views:
   - type: table
     name: Decisions
@@ -27,6 +32,8 @@ views:
       - note.status
       - note.date
       - note.summary
+      - note.superseded_by
+      - note.partially_superseded_by
     sort:
       - property: note.number
         direction: ASC
