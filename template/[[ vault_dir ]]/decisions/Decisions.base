@@ -1,6 +1,8 @@
 # The design index: every record in decisions/, by number, and what superseded it in whole or in part
-# (template-obsidian decisions 0001 and 0002).
+# (template-obsidian decisions 0001, 0002 and 0003). Created falls back to `date` for records written before `created`.
 # Template-owned: copier update replaces it. Want another view? Add a base of your own.
+formulas:
+  created: 'if(note.created, note.created, note.date)'
 filters:
   and:
     - file.inFolder("decisions")
@@ -12,8 +14,8 @@ properties:
     displayName: Record
   note.status:
     displayName: Status
-  note.date:
-    displayName: Date
+  formula.created:
+    displayName: Created
   note.summary:
     displayName: Summary
   note.superseded_by:
@@ -30,7 +32,7 @@ views:
       - note.number
       - file.name
       - note.status
-      - note.date
+      - formula.created
       - note.summary
       - note.superseded_by
       - note.partially_superseded_by
@@ -45,7 +47,7 @@ views:
     order:
       - note.number
       - file.name
-      - note.date
+      - formula.created
       - note.summary
     sort:
       - property: note.number
