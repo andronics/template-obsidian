@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/andronics/template-obsidian/compare/v1.3.1...v1.4.0) (2026-11-03)
+
+
+### ✨ Features
+
+* **check-vault:** check property values against types.json ([#28](https://github.com/andronics/template-obsidian/issues/28)) ([a60bdad](https://github.com/andronics/template-obsidian/commit/a60bdad57167649a75e971754831f295e2bc05fa))
+
+
+### 📚 Documentation
+
+* **adr:** approve types.json checks and created for design records ([#26](https://github.com/andronics/template-obsidian/issues/26)) ([d7c8ca9](https://github.com/andronics/template-obsidian/commit/d7c8ca958e9d64698743d8b34209ebd36d5b7337))
+
 ## [1.3.1](https://github.com/andronics/template-obsidian/compare/v1.3.0...v1.3.1) (2026-11-03)
 
 
