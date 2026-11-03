@@ -11,14 +11,18 @@ Template-owned: template-obsidian; changes come through `copier update` (its dec
   - every note's front matter parses (YAML, a mapping)
   - every embed (an exclamation mark before a wikilink) resolves to a file in the vault;
     a plain link to a missing note is fine: it marks the next note to write
-  - every design record in decisions/ has the properties, a valid status, a unique
-    number matching its name and the five headings
+  - every design record in decisions/ has the properties (`date` or `created`; `approved`
+    and `approved_by` are optional), a valid status, a unique number matching its name
+    and the five headings (decision 0003)
   - every actor note (`kind: actor`, outside the templates folder) has a valid status
   - design records and actor notes link their successors both ways, each within its
     own kind: `supersedes` with `superseded_by` (the whole note), and
     `partially_supersedes` with `partially_superseded_by` (a part of it; the rest
     stands, or several split it). A note with `superseded_by` has `status: superseded`
     (an actor: or `deleted`), and a superseded actor names who took over (decision 0002)
+  - when `.obsidian/types.json` exists, every note's properties (outside the templates
+    folder) that it registers hold a value of their type; a property it doesn't register,
+    or a type this check doesn't know, isn't checked (decision 0003)
 
 The AI files' context budget is template-base's check (scripts/base-contract.py).
 
@@ -32,13 +36,15 @@ import json
 import re
 import subprocess
 import sys
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml
 
 STATUSES = {"proposed", "approved", "implemented", "superseded", "rejected"}
 ACTOR_STATUSES = {"planned", "created", "installed", "active", "retired", "superseded", "deleted"}
-PROPERTIES = ["kind", "number", "status", "date", "authors", "summary", "supersedes", "superseded_by", "tags"]
+PROPERTIES = ["kind", "number", "status", "authors", "summary", "supersedes", "superseded_by", "tags"]
+DATED = ("date", "created")  # a record has at least one; both are allowed (decision 0003)
 HEADINGS = ["Context", "Decision", "Alternatives considered", "Consequences", "Open questions"]
 RECORD_NAME = re.compile(r"^📝 (\d{4}) \S")
 EMBED = re.compile(r"!\[\[([^\]]+)\]\]")
@@ -93,7 +99,10 @@ def check_records(records: dict[Path, dict], bodies: dict[Path, str], errors: li
     numbers: dict[int, Path] = {}
     for path, props in records.items():
         where = f"error: {path}"
-        if missing := [p for p in PROPERTIES if p not in props]:
+        missing = [p for p in PROPERTIES if p not in props]
+        if not any(p in props for p in DATED):
+            missing.insert(3, " or ".join(DATED))
+        if missing:
             errors.append(f"{where}: missing properties: {', '.join(missing)}")
             continue
         if props["kind"] != "decision":
@@ -142,6 +151,48 @@ def templates_folder(vault: Path) -> str:
     return str(folder or "_templates").strip("/")
 
 
+def property_types(vault: Path, errors: list[str]) -> dict[str, str]:
+    """Obsidian's property types (`.obsidian/types.json`), by lower-cased name; none if it has no file."""
+    path = vault / ".obsidian/types.json"
+    if not path.is_file():
+        return {}
+    try:
+        types = json.loads(path.read_text(encoding="utf-8")).get("types")
+    except (OSError, ValueError, AttributeError):
+        types = None
+    if not isinstance(types, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in types.items()):
+        errors.append("error: .obsidian/types.json: not JSON whose types is a mapping of property names to types")
+        return {}
+    return {name.lower(): kind for name, kind in types.items()}
+
+
+SCALAR = (str, int, float, bool, date)  # a datetime is a date too
+DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DATETIME = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$")
+# Each type Obsidian writes, and whether a value YAML parsed is one; a type not here isn't checked.
+TYPES = {
+    "text": lambda v: isinstance(v, SCALAR),
+    "multitext": lambda v: isinstance(v, list) and all(isinstance(i, SCALAR) for i in v),
+    "aliases": lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v),
+    "tags": lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v),
+    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+    "checkbox": lambda v: isinstance(v, bool),
+    "date": lambda v: (isinstance(v, date) and not isinstance(v, datetime)) or (isinstance(v, str) and bool(DATE.match(v))),
+    "datetime": lambda v: isinstance(v, date) or (isinstance(v, str) and bool(DATETIME.match(v))),
+}
+
+
+def check_types(rel: Path, props: dict, types: dict[str, str], errors: list[str]) -> None:
+    """Each registered property holds a value of its type; an empty value or list passes (decision 0003)."""
+    for name, value in props.items():
+        kind = types.get(str(name).lower())
+        valid = TYPES.get(kind or "")
+        if valid is None or value is None or value == [] or valid(value):
+            continue
+        shown = json.dumps(value, ensure_ascii=False, default=str)
+        errors.append(f"error: {rel}: {name} is {shown}, not {kind}")
+
+
 def links(value: object) -> list[object]:
     """A property's values as a list: none, one, or a list."""
     if value is None:
@@ -185,6 +236,7 @@ def main() -> int:
     vault = (root / args.vault).resolve()
     errors: list[str] = []
     skeletons = Path(templates_folder(vault))
+    types = property_types(vault, errors)
 
     files = vault_files(vault)
     names = {str(p.relative_to(vault)).lower() for p in files}
@@ -204,6 +256,8 @@ def main() -> int:
             if not isinstance(props, dict):
                 errors.append(f"error: {rel}: front matter is not a mapping of properties")
                 continue
+        if types and not rel.is_relative_to(skeletons):
+            check_types(rel, props, types, errors)  # type: ignore[arg-type]
         for target in EMBED.findall(CODE.sub("", body)):
             if not resolves(target, names):
                 errors.append(f"error: {rel}: embeds a missing file: {target}")

@@ -249,31 +249,98 @@ VAULT_CASES = {
     "actor to a record": ({"actors/🔔 Herald.md": ACTOR.format(status="active", links='supersedes: ["[[📝 0001 Keep Notes Here]]"]\n')},
                           "supersedes '[[📝 0001 Keep Notes Here]]', which is not an actor note"),
     "actor template skipped": ({"_templates/🎭 Actor.md": ACTOR.format(status="", links="superseded_by: x\n")}, ""),
+    # Records take `created` in place of `date`, or both (decision 0003).
+    "record with created": ({"decisions/📝 0002 Follow Upstream.md": NEW.replace("date:", "created:")}, ""),
+    "record with both": ({"decisions/📝 0002 Follow Upstream.md": NEW.replace("date: 2026-11-01\n", "date: 2026-11-01\ncreated: 2026-11-02\napproved: 2026-11-03\napproved_by: A. Maintainer\n")}, ""),
+    "record with neither": ({"decisions/📝 0002 Follow Upstream.md": NEW.replace("date: 2026-11-01\n", "")},
+                            "missing properties: date or created"),
 }  # fmt: skip
+NOTES = {"decisions/📝 0001 Keep Notes Here.md": OLD, "decisions/📝 0002 Follow Upstream.md": NEW,
+         P3: PART_OLD, P4: PART_NEW, "actors/🎺 Old Bot.md": SPLIT, "actors/🔔 Herald.md": HERALD,
+         "actors/📯 Crier.md": CRIER, "🧭 Topic.md": "---\ntags: [topic]\n---\nSee [[🧭 Not Yet]] and ![[🏠 Home]].\n"}  # fmt: skip
+
+
+def run_vault_check(project: Path, tmp_path: Path, files: dict[str, str]) -> tuple[Path, subprocess.CompletedProcess[str]]:
+    """check-vault.py on a copy of the render, with the test notes and `files` (vault paths) added."""
+    copy_ = tmp_path / project.name
+    shutil.copytree(project, copy_)
+    vault = copy_ / "knowledge"
+    for name, text in {**NOTES, **files}.items():
+        (vault / name).parent.mkdir(parents=True, exist_ok=True)
+        (vault / name).write_text(text, encoding="utf-8")
+    result = subprocess.run(["uv", "run", "-q", "scripts/check-vault.py"], cwd=copy_, capture_output=True, text=True)
+    return copy_, result
 
 
 @pytest.mark.parametrize("case", VAULT_CASES)
 def test_vault_check(case: str, project: Path, tmp_path: Path) -> None:
     """The vault check (through scripts/checks.sh) fails on what is always broken."""
-    copy_ = tmp_path / project.name
-    shutil.copytree(project, copy_)
-    vault = copy_ / "knowledge"
-    notes = {"decisions/📝 0001 Keep Notes Here.md": OLD, "decisions/📝 0002 Follow Upstream.md": NEW,
-             P3: PART_OLD, P4: PART_NEW, "actors/🎺 Old Bot.md": SPLIT, "actors/🔔 Herald.md": HERALD,
-             "actors/📯 Crier.md": CRIER, "🧭 Topic.md": "---\ntags: [topic]\n---\nSee [[🧭 Not Yet]] and ![[🏠 Home]].\n"}  # fmt: skip
     files, error = VAULT_CASES[case]
-    for name, text in {**notes, **files}.items():
-        (vault / name).parent.mkdir(parents=True, exist_ok=True)
-        (vault / name).write_text(text, encoding="utf-8")
-    result = subprocess.run(["uv", "run", "-q", "scripts/check-vault.py"], cwd=copy_, capture_output=True, text=True)
+    copy_, result = run_vault_check(project, tmp_path, files)
     if not error:
         assert result.returncode == 0, result.stdout + result.stderr
-        files_ = 13 + sum(1 for name in files if name not in notes)
+        files_ = 13 + sum(1 for name in files if name not in NOTES)
         assert result.stdout == f"check-vault OK: {files_} files, 4 design records, 3 actors\n"
         assert checks(copy_).returncode == 0
     else:
         assert result.returncode == 1 and error in result.stdout, result.stdout + result.stderr
         assert checks(copy_).returncode != 0
+
+
+# Obsidian's property-type registry (decision 0003): one property per type, a name in another case,
+# a type this check doesn't know, and the record properties the template writes.
+TYPES = {"types": {"Updated": "date", "seen": "datetime", "count": "number", "done": "checkbox", "related": "multitext",
+                   "aliases": "aliases", "tags": "tags", "summary": "text", "odd": "someNewType",
+                   "created": "date", "approved": "date", "approved_by": "text", "number": "number"}}
+TYPED = ("---\ntags: [topic]\nupdated: 2026-11-01\nseen: 2026-11-01T10:30:00\ncount: 3.5\ndone: false\n"
+         "related: ['[[🏠 Home]]', 2]\naliases: [Alt]\nsummary: 12\nodd: [[x]]\nunregistered: [[y]]\n---\nTyped.\n")
+
+
+def typed(**props: str) -> dict[str, str]:
+    """The typed note, with each of `props` replaced or added (`name: value` as written)."""
+    text = TYPED
+    for name, value in props.items():
+        line = re.search(rf"^{name}:.*$", text, re.M)
+        text = text.replace(line.group(0), f"{name}: {value}") if line else text.replace("---\nTyped", f"{name}: {value}\n---\nTyped")
+    return {"🧭 Typed.md": text}
+
+
+TYPE_CASES = {
+    "valid": (TYPES, typed(), ""),
+    "quoted date and datetime": (TYPES, typed(updated='"2026-11-01"', seen='"2026-11-01T10:30"'), ""),
+    "datetime as a date or with seconds": (TYPES, {**typed(seen="2026-11-01"), "🧭 Two.md": TYPED.replace("2026-11-01T10:30:00", '"2026-11-01T10:30:15"')}, ""),
+    "empty values": (TYPES, typed(updated="", seen="", count="", done="", related="[]", aliases="[]", tags="[]", summary=""), ""),
+    "record properties": (TYPES, {"decisions/📝 0002 Follow Upstream.md": NEW.replace("date:", "created:").replace(
+        "status: approved\n", "status: approved\napproved: 2026-11-03\napproved_by: A. Maintainer\n")}, ""),
+    "no types.json": (None, typed(updated='"1 Nov"', done="yes", tags="topic"), ""),
+    "templates folder skipped": (TYPES, {"_templates/🧭 Typed.md": TYPED.replace("done: false", 'done: "{{x}}"')}, ""),
+    "bad date": (TYPES, typed(updated='"1 Nov"'), 'error: 🧭 Typed.md: updated is "1 Nov", not date'),
+    "timestamp for a date": (TYPES, typed(updated="2026-11-01T10:30:00"), "updated is \"2026-11-01 10:30:00\", not date"),
+    "bad datetime": (TYPES, typed(seen='"2026-11-01 10:30"'), 'seen is "2026-11-01 10:30", not datetime'),
+    "boolean for a number": (TYPES, typed(count="true"), "count is true, not number"),
+    "string for a checkbox": (TYPES, typed(done='"yes"'), 'done is "yes", not checkbox'),
+    "one value for a list": (TYPES, typed(related='"[[🏠 Home]]"'), 'related is "[[🏠 Home]]", not multitext'),
+    "nested list in a list": (TYPES, typed(related="[[[🏠 Home]]]"), 'related is [[["🏠 Home"]]], not multitext'),
+    "number in aliases": (TYPES, typed(aliases="[1]"), "aliases is [1], not aliases"),
+    "one tag": (TYPES, typed(tags="topic"), 'tags is "topic", not tags'),
+    "unquoted link for text": (TYPES, typed(summary="[[🏠 Home]]"), 'summary is [["🏠 Home"]], not text'),
+    "not JSON": ("{types:", typed(), "error: .obsidian/types.json: not JSON whose types is a mapping"),
+    "types not a mapping": ({"types": ["date"]}, typed(), "error: .obsidian/types.json: not JSON whose types is a mapping"),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("case", TYPE_CASES)
+def test_property_types(case: str, project: Path, tmp_path: Path) -> None:
+    """With .obsidian/types.json, every note's registered properties hold a value of their type (decision 0003)."""
+    types, files, error = TYPE_CASES[case]
+    if types is not None:
+        files = {**files, ".obsidian/types.json": types if isinstance(types, str) else json.dumps(types)}
+    _, result = run_vault_check(project, tmp_path, files)
+    if not error:
+        assert result.returncode == 0 and result.stdout.startswith("check-vault OK:"), result.stdout + result.stderr
+    else:
+        assert result.returncode == 1 and error in result.stdout, result.stdout + result.stderr
+        assert len(result.stdout.splitlines()) == 1, result.stdout
 
 
 def test_vault_check_without_actors_reads_as_before(project: Path) -> None:
