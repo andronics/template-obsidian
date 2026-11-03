@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/andronics/template-obsidian/compare/v1.2.3...v1.3.0) (2026-11-03)
+
+
+### ✨ Features
+
+* partial supersession and the actor status lifecycle in check-vault ([#22](https://github.com/andronics/template-obsidian/issues/22)) ([30f8395](https://github.com/andronics/template-obsidian/commit/30f83959613a67f1bb085ab13fd2695311bbaf29))
+
 ## [1.2.3](https://github.com/andronics/template-obsidian/compare/v1.2.2...v1.2.3) (2026-11-02)
 
 
