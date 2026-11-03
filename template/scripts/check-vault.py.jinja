@@ -12,8 +12,13 @@ Template-owned: template-obsidian; changes come through `copier update` (its dec
   - every embed (an exclamation mark before a wikilink) resolves to a file in the vault;
     a plain link to a missing note is fine: it marks the next note to write
   - every design record in decisions/ has the properties, a valid status, a unique
-    number matching its name, the five headings, and supersedes/superseded_by links
-    that resolve and point at each other
+    number matching its name and the five headings
+  - every actor note (`kind: actor`, outside the templates folder) has a valid status
+  - design records and actor notes link their successors both ways, each within its
+    own kind: `supersedes` with `superseded_by` (the whole note), and
+    `partially_supersedes` with `partially_superseded_by` (a part of it; the rest
+    stands, or several split it). A note with `superseded_by` has `status: superseded`
+    (an actor: or `deleted`), and a superseded actor names who took over (decision 0002)
 
 The AI files' context budget is template-base's check (scripts/base-contract.py).
 
@@ -23,6 +28,7 @@ The AI files' context budget is template-base's check (scripts/base-contract.py)
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -31,6 +37,7 @@ from pathlib import Path
 import yaml
 
 STATUSES = {"proposed", "approved", "implemented", "superseded", "rejected"}
+ACTOR_STATUSES = {"planned", "created", "installed", "active", "retired", "superseded", "deleted"}
 PROPERTIES = ["kind", "number", "status", "date", "authors", "summary", "supersedes", "superseded_by", "tags"]
 HEADINGS = ["Context", "Decision", "Alternatives considered", "Consequences", "Open questions"]
 RECORD_NAME = re.compile(r"^📝 (\d{4}) \S")
@@ -106,26 +113,68 @@ def check_records(records: dict[Path, dict], bodies: dict[Path, str], errors: li
         headings = {re.sub(r"^[^\w]+", "", h).strip() for h in re.findall(r"^## (.+)$", bodies[path], re.M)}
         if missing := [h for h in HEADINGS if h not in headings]:
             errors.append(f"{where}: missing headings: {', '.join(missing)}")
+        if props["superseded_by"] is not None and props["status"] != "superseded":
+            errors.append(f"{where}: superseded_by is set, so status must be 'superseded'")
+    check_successors(records, "a design record", errors)
 
-        supersedes = props["supersedes"] or []
-        if not isinstance(supersedes, list):
-            supersedes = [supersedes]
-        for value in supersedes:
-            old = by_name.get(link_name(value) or "")
-            if not old:
-                errors.append(f"{where}: supersedes {value!r}, which is not a design record")
-            elif link_name(records[old].get("superseded_by")) != path.stem:
-                errors.append(f"{where}: supersedes {old.stem}, whose superseded_by doesn't link back")
-        if (value := props["superseded_by"]) is not None:
-            new = by_name.get(link_name(value) or "")
-            if not new:
-                errors.append(f"{where}: superseded_by {value!r}, which is not a design record")
-                continue
-            back = records[new].get("supersedes") or []
-            if path.stem not in {link_name(v) for v in (back if isinstance(back, list) else [back])}:
-                errors.append(f"{where}: superseded by {new.stem}, whose supersedes doesn't link back")
-            if props["status"] != "superseded":
-                errors.append(f"{where}: superseded_by is set, so status must be 'superseded'")
+
+def check_actors(actors: dict[Path, dict], errors: list[str]) -> None:
+    """An actor's status is one of its lifecycle's; a superseded actor names its successor (decision 0002)."""
+    for path, props in actors.items():
+        where = f"error: {path}"
+        status = props.get("status")
+        if status not in ACTOR_STATUSES:
+            errors.append(f"{where}: status {status!r} is not one of {', '.join(sorted(ACTOR_STATUSES))}")
+        if status == "superseded" and not links(props.get("superseded_by")) + links(props.get("partially_superseded_by")):
+            errors.append(f"{where}: status is 'superseded', so superseded_by (or, for a split, "
+                          "partially_superseded_by) must name who took over")
+        if props.get("superseded_by") is not None and status not in {"superseded", "deleted"}:
+            errors.append(f"{where}: superseded_by is set, so status must be 'superseded' or 'deleted'")
+    check_successors(actors, "an actor note", errors)
+
+
+def templates_folder(vault: Path) -> str:
+    """Obsidian's templates folder (`.obsidian/templates.json`), whose notes are skeletons, not notes."""
+    try:
+        folder = json.loads((vault / ".obsidian/templates.json").read_text(encoding="utf-8")).get("folder")
+    except (OSError, ValueError, AttributeError):
+        folder = None
+    return str(folder or "_templates").strip("/")
+
+
+def links(value: object) -> list[object]:
+    """A property's values as a list: none, one, or a list."""
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
+# The two supersession pairs: each property and the one that must link back.
+PAIRS = [("supersedes", "superseded_by"), ("partially_supersedes", "partially_superseded_by")]
+
+
+def check_successors(notes: dict[Path, dict], what: str, errors: list[str]) -> None:
+    """Supersession links within one kind of note resolve and point at each other (decision 0002)."""
+    by_name = {path.stem: path for path in notes}
+    for path, props in notes.items():
+        where = f"error: {path}"
+        named: dict[str, set[str]] = {}
+        for forward, back in PAIRS:
+            for prop, other in ((forward, back), (back, forward)):
+                for value in links(props.get(prop)):
+                    target = by_name.get(link_name(value) or "")
+                    if not target:
+                        errors.append(f"{where}: {prop} {value!r}, which is not {what}")
+                        continue
+                    if target == path:
+                        errors.append(f"{where}: {prop} names the note itself")
+                        continue
+                    named.setdefault(target.stem, set()).add(prop)
+                    if path.stem not in {link_name(v) for v in links(notes[target].get(other))}:
+                        errors.append(f"{where}: {prop} {target.stem}, whose {other} doesn't link back")
+        for stem, props_ in sorted(named.items()):
+            if any({whole, part} <= props_ for whole, part in zip(*PAIRS)):
+                errors.append(f"{where}: {stem} is named as both wholly and partially superseded")
 
 
 def main() -> int:
@@ -135,11 +184,13 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     vault = (root / args.vault).resolve()
     errors: list[str] = []
+    skeletons = Path(templates_folder(vault))
 
     files = vault_files(vault)
     names = {str(p.relative_to(vault)).lower() for p in files}
     records: dict[Path, dict] = {}
     bodies: dict[Path, str] = {}
+    actors: dict[Path, dict] = {}
     for path in (p for p in files if p.suffix == ".md"):
         rel = path.relative_to(vault)
         front, body = split_note(path.read_text(encoding="utf-8"))
@@ -159,10 +210,14 @@ def main() -> int:
         if rel.parts[0] == "decisions":
             records[rel] = props  # type: ignore[assignment]
             bodies[rel] = body
+        elif props.get("kind") == "actor" and not rel.is_relative_to(skeletons):  # type: ignore[union-attr]
+            actors[rel] = props  # type: ignore[assignment]
     check_records(records, bodies, errors)
+    check_actors(actors, errors)
 
     # Quiet on a pass: an assistant reads this output on every run (template-base decision 0001).
-    print("\n".join(errors) if errors else f"check-vault OK: {len(names)} files, {len(records)} design records")
+    counted = f"{len(names)} files, {len(records)} design records" + (f", {len(actors)} actors" if actors else "")
+    print("\n".join(errors) if errors else f"check-vault OK: {counted}")
     return 1 if errors else 0
 
 

@@ -7,9 +7,11 @@ authors: []
 summary:                # the decision in one line
 supersedes: []          # wikilinks, quoted: ["[[📝 0001 Title]]"]
 superseded_by:
+partially_supersedes: []      # records this one replaces only part of
+partially_superseded_by: []   # records that replaced part of this one; it stands otherwise
 tags: [decision]
 ---
-%% Name this note `📝 NNNN Title In Title Case` with the next free number, and fill `number`, `authors` and `summary`. A superseding record lists the old one in `supersedes`; the old one gets `superseded_by` and `status: superseded`. Template-owned: change it in project-template. %%
+%% Name this note `📝 NNNN Title In Title Case` with the next free number, and fill `number`, `authors` and `summary`. A superseding record lists the old one in `supersedes`; the old one gets `superseded_by` and `status: superseded`. A record that replaces only part of an old one lists it in `partially_supersedes` and says which part in its Decision; the old one gets `partially_superseded_by` and keeps its status. Template-owned: change it in template-obsidian. %%
 
 ## 🧭 Context
 

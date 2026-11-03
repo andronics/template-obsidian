@@ -202,6 +202,16 @@ OLD = RECORD.format(number=1, status="superseded", supersedes="[]",
                     superseded_by='"[[📝 0002 Follow Upstream]]"')  # fmt: skip
 NEW = RECORD.format(number=2, status="approved", supersedes='["[[📝 0001 Keep Notes Here]]"]',
                     superseded_by="")  # fmt: skip
+# Partial supersession (decision 0002): 0004 replaces a part of 0003, which stands otherwise.
+PART_OLD = RECORD.format(number=3, status="implemented", supersedes="[]", superseded_by="").replace(
+    "superseded_by: \n", 'superseded_by: \npartially_superseded_by: ["[[📝 0004 Change One Point]]"]\n')
+PART_NEW = RECORD.format(number=4, status="approved", supersedes="[]", superseded_by="").replace(
+    "supersedes: []\n", 'supersedes: []\npartially_supersedes: ["[[📝 0003 Many Points]]"]\n')
+ACTOR = "---\nkind: actor\nstatus: {status}\n{links}tags: [actors]\n---\n\n*An actor.*\n"
+SPLIT = ACTOR.format(status="deleted", links='partially_superseded_by: ["[[🔔 Herald]]", "[[📯 Crier]]"]\n')
+HERALD = ACTOR.format(status="active", links='partially_supersedes: ["[[🎺 Old Bot]]"]\n')
+CRIER = ACTOR.format(status="installed", links='partially_supersedes: ["[[🎺 Old Bot]]"]\n')
+P3, P4 = "decisions/📝 0003 Many Points.md", "decisions/📝 0004 Change One Point.md"
 VAULT_CASES = {
     "valid": ({}, ""),
     "broken embed": ({"🧭 Topic.md": "See [[🧭 Not Yet]].\n\n![[missing.png]]\n"}, "embeds a missing file"),
@@ -212,6 +222,33 @@ VAULT_CASES = {
                         "missing headings: Alternatives considered"),
     "one-sided supersedes": ({"decisions/📝 0001 Keep Notes Here.md": OLD.replace("superseded_by: \"[[📝 0002 Follow Upstream]]\"", "superseded_by:")},
                              "doesn't link back"),
+    "superseded_by needs superseded": ({"decisions/📝 0001 Keep Notes Here.md": OLD.replace("status: superseded", "status: approved")},
+                                       "superseded_by is set, so status must be 'superseded'"),
+    "one-sided partial": ({P3: PART_OLD.replace('partially_superseded_by: ["[[📝 0004 Change One Point]]"]\n', "")},
+                          "partially_supersedes 📝 0003 Many Points, whose partially_superseded_by doesn't link back"),
+    "partial to a non-record": ({P4: PART_NEW.replace("📝 0003 Many Points", "🧭 Topic")},
+                                "partially_supersedes '[[🧭 Topic]]', which is not a design record"),
+    "partial to itself": ({P4: PART_NEW.replace("📝 0003 Many Points", "📝 0004 Change One Point")},
+                          "partially_supersedes names the note itself"),
+    "wholly and partially": ({P4: PART_NEW.replace("supersedes: []", 'supersedes: ["[[📝 0003 Many Points]]"]'),
+                              P3: PART_OLD.replace("status: implemented", "status: superseded").replace(
+                                  "superseded_by: \n", 'superseded_by: "[[📝 0004 Change One Point]]"\n')},
+                             "📝 0003 Many Points is named as both wholly and partially superseded"),
+    "actor whole successor": ({"actors/🎺 Old Bot.md": ACTOR.format(status="superseded", links='superseded_by: "[[🔔 Herald]]"\n'),
+                               "actors/🔔 Herald.md": ACTOR.format(status="active", links='supersedes: ["[[🎺 Old Bot]]"]\n'),
+                               "actors/📯 Crier.md": ACTOR.format(status="retired", links="")}, ""),
+    "actor bad status": ({"actors/📯 Crier.md": ACTOR.format(status="gone", links='partially_supersedes: ["[[🎺 Old Bot]]"]\n')},
+                         "status 'gone' is not one of active, created, deleted, installed, planned, retired, superseded"),
+    "actor superseded alone": ({"actors/🎺 Old Bot.md": ACTOR.format(status="superseded", links="")},
+                               "status is 'superseded', so superseded_by (or, for a split, partially_superseded_by)"),
+    "actor still active": ({"actors/🎺 Old Bot.md": ACTOR.format(status="active", links='superseded_by: "[[🔔 Herald]]"\n'),
+                            "actors/🔔 Herald.md": ACTOR.format(status="active", links='supersedes: ["[[🎺 Old Bot]]"]\n')},
+                           "superseded_by is set, so status must be 'superseded' or 'deleted'"),
+    "actor one-sided": ({"actors/📯 Crier.md": CRIER.replace("partially_supersedes", "supersedes")},
+                        "partially_superseded_by 📯 Crier, whose partially_supersedes doesn't link back"),
+    "actor to a record": ({"actors/🔔 Herald.md": ACTOR.format(status="active", links='supersedes: ["[[📝 0001 Keep Notes Here]]"]\n')},
+                          "supersedes '[[📝 0001 Keep Notes Here]]', which is not an actor note"),
+    "actor template skipped": ({"_templates/🎭 Actor.md": ACTOR.format(status="", links="superseded_by: x\n")}, ""),
 }  # fmt: skip
 
 
@@ -222,18 +259,27 @@ def test_vault_check(case: str, project: Path, tmp_path: Path) -> None:
     shutil.copytree(project, copy_)
     vault = copy_ / "knowledge"
     notes = {"decisions/📝 0001 Keep Notes Here.md": OLD, "decisions/📝 0002 Follow Upstream.md": NEW,
-             "🧭 Topic.md": "---\ntags: [topic]\n---\nSee [[🧭 Not Yet]] and ![[🏠 Home]].\n"}  # fmt: skip
+             P3: PART_OLD, P4: PART_NEW, "actors/🎺 Old Bot.md": SPLIT, "actors/🔔 Herald.md": HERALD,
+             "actors/📯 Crier.md": CRIER, "🧭 Topic.md": "---\ntags: [topic]\n---\nSee [[🧭 Not Yet]] and ![[🏠 Home]].\n"}  # fmt: skip
     files, error = VAULT_CASES[case]
     for name, text in {**notes, **files}.items():
+        (vault / name).parent.mkdir(parents=True, exist_ok=True)
         (vault / name).write_text(text, encoding="utf-8")
     result = subprocess.run(["uv", "run", "-q", "scripts/check-vault.py"], cwd=copy_, capture_output=True, text=True)
     if not error:
         assert result.returncode == 0, result.stdout + result.stderr
-        assert result.stdout == "check-vault OK: 8 files, 2 design records\n"
+        files_ = 13 + sum(1 for name in files if name not in notes)
+        assert result.stdout == f"check-vault OK: {files_} files, 4 design records, 3 actors\n"
         assert checks(copy_).returncode == 0
     else:
         assert result.returncode == 1 and error in result.stdout, result.stdout + result.stderr
         assert checks(copy_).returncode != 0
+
+
+def test_vault_check_without_actors_reads_as_before(project: Path) -> None:
+    """A brain with no actor notes gets the same output as before decision 0002."""
+    result = subprocess.run(["uv", "run", "-q", "scripts/check-vault.py"], cwd=project, capture_output=True, text=True)
+    assert result.stdout == "check-vault OK: 5 files, 0 design records\n", result.stdout + result.stderr
 
 
 def test_brain_pull_is_opt_in(base_src: Path, obsidian_src: Path, tmp_path: Path) -> None:

@@ -17,10 +17,11 @@ A brain: notes, not code. An Obsidian vault: start at `[[ vault ]]🏠 Home.md`,
 ## Conventions
 
 - **Links:** by note name, never by path.
-- **Design records:** `📝 NNNN Title.md` in `decisions/`, from the template: next number, `status: proposed`. A successor's `supersedes` and the old record's `superseded_by` link each other.
+- **Design records:** `📝 NNNN Title.md` in `decisions/`, from the template: next number, `status: proposed`. A successor's `supersedes` and the old record's `superseded_by` link each other; a part-successor's `partially_supersedes` and `partially_superseded_by` likewise, and the old record keeps its status.
+- **Actor notes** (`kind: actor`): `status` is `planned`, `created`, `installed`, `active`, `retired`, `superseded` or `deleted`; successors link both ways as records do.
 - **`.obsidian/`:** never edit beyond `app.json` and `templates.json`.
 - **Workarounds** link their issue in the note.
 
 ## Checks
 
-`sh scripts/checks.sh` runs `uv run scripts/check-vault.py` (front matter, embeds, design records) and `sh scripts/check.sh`.
+`sh scripts/checks.sh` runs `uv run scripts/check-vault.py` (front matter, embeds, design records, actor statuses) and `sh scripts/check.sh`.
