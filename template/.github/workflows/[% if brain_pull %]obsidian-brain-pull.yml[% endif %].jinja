@@ -158,7 +158,7 @@ jobs:
             - brain-pull-out/issues.json, only if needed: [{"title": "...", "body": "..."}].
             Don't commit, push or open anything: a later job does that.
           claude_args: |
-            --max-turns 40
+            --max-turns 120
             --allowedTools "Read,Glob,Grep,Edit(./[[ vault ]]**/*.md),Write(./brain-pull-out/**),Edit(./brain-pull-out/**),Bash(gh api:*),Bash(gh issue view:*),Bash(gh pr view:*),Bash(gh release view:*),Bash(gh release list:*),Bash(cd:*),Bash(cat:*),Bash(jq:*),Bash(base64:*),Bash(grep:*),Bash(head:*),Bash(tail:*),Bash(wc:*),Bash(sort:*),Bash(ls:*),Bash(date:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(uv run scripts/check-vault.py)"
             --disallowedTools "WebFetch,WebSearch"
 
