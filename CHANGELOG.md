@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/andronics/template-obsidian/compare/v1.3.0...v1.3.1) (2026-11-03)
+
+
+### 🐛 Bug Fixes
+
+* **brain-pull:** raise Claude max-turns from 40 to 120 ([#24](https://github.com/andronics/template-obsidian/issues/24)) ([926c46d](https://github.com/andronics/template-obsidian/commit/926c46d60f00f97a15249c8885c7daf6c245e867))
+
 ## [1.3.0](https://github.com/andronics/template-obsidian/compare/v1.2.3...v1.3.0) (2026-11-03)
 
 
