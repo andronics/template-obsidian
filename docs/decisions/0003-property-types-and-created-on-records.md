@@ -1,6 +1,6 @@
 # 0003: Property types from types.json, and created on design records
 
-Status: Proposed
+Status: Approved
 Date: 2026-11-03
 Authors: Stephen Cox
 
@@ -120,4 +120,4 @@ minor release.
 
 ## Open questions
 
-None for the template. Approval of this record is the brain coordinator's.
+None. Approved by the brain coordinator for Stephen, 2026-11-03.
