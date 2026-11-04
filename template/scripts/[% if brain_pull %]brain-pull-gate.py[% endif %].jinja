@@ -10,10 +10,12 @@ Template-owned: template-obsidian; changes come through `copier update` (its dec
 `subscriptions:` property, `source` and `follow`), or by a note naming it in `repos:`, an
 implicit `follow: [everything]` that a subscription replaces. The gate asks the GitHub API
 what changed in each part followed since a date, writes that per source with the notes
-naming it, and prints the changed sources. A malformed subscription list exits 2, a failed
+naming it, and prints the changed sources. With `--read FILE` it also writes, per changed
+source, its default branch's head at SINCE and now (`owner/repo@<before> → <after>`), for the
+run's report. A malformed subscription list exits 2, a failed
 API call 1 (so the next run retries the same window); a source it can't find is a warning.
 
-    uv run scripts/brain-pull-gate.py SINCE OUT_FILE [--vault DIR]
+    uv run scripts/brain-pull-gate.py SINCE OUT_FILE [--read FILE] [--vault DIR]
     uv run scripts/brain-pull-gate.py --list [--vault DIR]    # what is followed, no API calls
 """
 
@@ -113,6 +115,12 @@ def releases(repo: str, since: str) -> list[str]:
     return [r["tag_name"] for r in found if (r.get("published_at") or "") > since]
 
 
+def head(repo: str, until: str = "") -> str:
+    """The default branch's newest commit (at `until`, by commit date), short; `none` before the first."""
+    found = gh(f"repos/{repo}/commits?per_page=1" + (f"&until={until}" if until else ""), paginate=False)
+    return found[0]["sha"][:7] if found else "none"
+
+
 def changes(repo: str, kinds: list[str], since: str) -> dict[str, list[str]]:
     """Part -> what changed in it, for the parts with any change."""
     found = {}
@@ -134,6 +142,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("since", nargs="?", help="an ISO 8601 time, e.g. 2026-11-01T05:00:00Z")
     parser.add_argument("out", nargs="?", type=Path, help="where to write what changed (Markdown)")
+    parser.add_argument("--read", type=Path, help="where to write each changed source's head before and after")
     parser.add_argument("--list", action="store_true", help="print what is followed and stop")
     parser.add_argument("--vault", default="[[ vault_dir ]]", help="the vault's folder (default: %(default)s)")
     args = parser.parse_args()
@@ -151,10 +160,12 @@ def main() -> int:
             print(f"{repo}: {', '.join(kinds)}")
         return 0
 
-    lines, changed = [f"# What changed since {args.since}", ""], []
+    lines, changed, read = [f"# What changed since {args.since}", ""], [], []
     for repo, kinds in sorted(follow.items()):
         try:
             found = changes(repo, kinds, args.since)
+            if found and args.read:
+                read.append(f"- `{repo}@{head(repo, args.since)} → {head(repo)}`")
         except subprocess.CalledProcessError as e:
             if "HTTP 404" in e.stderr:
                 print(f"::warning::{repo}: not found (private, renamed or gone?)", file=sys.stderr)
@@ -173,6 +184,8 @@ def main() -> int:
                 lines.append(f"  - and {len(items) - SHOWN} more: read them with `gh api`")
         lines.append("")
     args.out.write_text("\n".join(lines), encoding="utf-8")
+    if args.read:
+        args.read.write_text("".join(f"{line}\n" for line in read), encoding="utf-8")
     print(" ".join(changed))
     return 0
 

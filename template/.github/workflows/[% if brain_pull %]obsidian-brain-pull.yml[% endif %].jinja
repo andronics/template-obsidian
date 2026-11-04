@@ -6,6 +6,9 @@
 # scripts/brain-pull-gate.py), and let Claude Code update the notes. Claude runs with a
 # read-only token; a second job checks its patch, then opens (or updates) one PR labelled
 # brain-pull. It never merges. A failed run is retried from the same date by the next one.
+# Each run reports what it read and changed, before → after, at the top of the PR body and
+# in the job summary: each changed source's head at the start and end of the window, and the
+# notes edited.
 #
 # Needs the CLAUDE_CODE_OAUTH_TOKEN secret (`claude setup-token`; without it every run
 # skips) and Settings > Actions > General > "Allow GitHub Actions to create and approve
@@ -88,7 +91,10 @@ jobs:
 
           # What changed, per source and part followed, goes to Claude in changes.md.
           mkdir -p brain-pull-out
-          changed=$(uv run -q scripts/brain-pull-gate.py "$since" brain-pull-out/changes.md)
+          # Each changed source's head then and now, for the run's report: kept out of
+          # brain-pull-out/, which Claude can write.
+          changed=$(uv run -q scripts/brain-pull-gate.py "$since" brain-pull-out/changes.md \
+            --read "$RUNNER_TEMP/brain-pull-read.md")
 
           # An open brain-pull PR is updated, not joined by a second one.
           # A branch left by a closed PR is never reused: its edits were rejected.
@@ -153,8 +159,10 @@ jobs:
             fix what it reports.
 
             Finally write:
-            - brain-pull-out/pr-body.md: per note, what changed and from which source PR,
-              release or commit (as owner/repo#N or a URL). Terse.
+            - brain-pull-out/pr-body.md: one line per change, per note: what it said before →
+              what it says now, and the source PR, release or commit (as owner/repo#N or a
+              URL). Terse. A later job puts what was read and which notes changed above it,
+              so don't list those.
             - brain-pull-out/issues.json, only if needed: [{"title": "...", "body": "..."}].
             Don't commit, push or open anything: a later job does that.
           claude_args: |
@@ -167,11 +175,32 @@ jobs:
         if: steps.gate.outputs.changed != ''
         env:
           VAULT_DIR: "[[ vault_dir ]]"
+          READ: ${{ runner.temp }}/brain-pull-read.md
         run: |
           set -euo pipefail
           mkdir -p brain-pull-out
           # Tracked files only: a note Claude created can't be in the patch.
           git diff --binary -- "$VAULT_DIR" > brain-pull-out/vault.patch
+
+          # The run's report, before → after: what it read, and the notes it changed.
+          # Computed here, not by Claude; the propose job puts it above Claude's pr-body.md.
+          notes=$(git -c core.quotePath=false diff --name-only -- "$VAULT_DIR")
+          n=$(printf '%s' "$notes" | grep -c . || true)
+          {
+            echo "**Read**"
+            echo
+            if [ -s "$READ" ]; then cat "$READ"; else echo "- nothing listed"; fi
+            echo
+            if [ "$n" -eq 0 ]; then
+              echo "**Vault unchanged**"
+            else
+              [ "$n" -eq 1 ] && unit=note || unit=notes
+              echo "**Vault:** none → $n $unit"
+              echo
+              printf '%s\n' "$notes" | sed "s/.*/- \`&\`/"
+            fi
+          } > brain-pull-out/report.md
+          { echo; cat brain-pull-out/report.md; } >> "$GITHUB_STEP_SUMMARY"
           if [ -e brain-pull-out/issues.json ] && ! jq -e \
               'type == "array" and all(.[]; (.title | type) == "string" and (.body | type) == "string")' \
               brain-pull-out/issues.json >/dev/null; then
@@ -285,11 +314,13 @@ jobs:
             git push -q -u origin "$BRANCH"
 
             [ -s "$OUT/pr-body.md" ] || echo "Notes updated by the Brain pull workflow." > "$OUT/pr-body.md"
+            # What was read and changed, before → after, then Claude's per-note lines.
+            { if [ -s "$OUT/report.md" ]; then cat "$OUT/report.md"; echo; fi; cat "$OUT/pr-body.md"; } > "$OUT/body.md"
             pr=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number // empty')
             if [ -n "$pr" ]; then
-              gh pr comment "$pr" --body-file "$OUT/pr-body.md"
+              gh pr comment "$pr" --body-file "$OUT/body.md"
             elif ! gh pr create --base main --head "$BRANCH" --label brain-pull \
-                --title "docs: brain pull $(date -u +%F)" --body-file "$OUT/pr-body.md"; then
+                --title "docs: brain pull $(date -u +%F)" --body-file "$OUT/body.md"; then
               # Failing keeps the date: the next run reads the same window again.
               echo "::error::Couldn't open the PR. Allow Actions to create PRs: gh api -X PUT repos/$REPO/actions/permissions/workflow -F can_approve_pull_request_reviews=true"
               exit 1

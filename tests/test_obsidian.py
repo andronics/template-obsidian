@@ -361,10 +361,12 @@ def test_brain_pull_workflow(project: Path) -> None:
     jobs = flow["jobs"]
     assert flow["permissions"] == {} and set(jobs) == {"update", "propose"}
     assert jobs["update"]["permissions"] == {"contents": "read", "pull-requests": "read", "actions": "read"}
-    steps = {s.get("name") or s["uses"].split("@")[0]: s for s in jobs["update"]["steps"]}
-    gate = steps["Which followed sources changed?"]
+    steps = {s.get("id") or s.get("name") or s["uses"].split("@")[0]: s for s in jobs["update"]["steps"]}
+    gate = steps["gate"]
     assert "--workflow obsidian-brain-pull.yml --branch main --status success" in gate["run"]
     assert 'scripts/brain-pull-gate.py "$since" brain-pull-out/changes.md' in gate["run"]
+    assert '--read "$RUNNER_TEMP/brain-pull-read.md"' in gate["run"]  # out of Claude's reach
+    assert steps["package"]["env"]["READ"] == "${{ runner.temp }}/brain-pull-read.md"
     claude = steps["Claude Code updates the notes"]
     assert "`knowledge/🛰️ Subscriptions.md`" in claude["with"]["prompt"]
     assert "Edit(./knowledge/**/*.md)" in claude["with"]["claude_args"]
@@ -408,6 +410,7 @@ def test_brain_pull_dispatches_ci_only_without_scout(dispatch: str, dispatched: 
         (bin_ / tool).write_text(f'#!/bin/sh\necho "{tool} $*" >> "{log}"\n')
         (bin_ / tool).chmod(0o755)
     (out / "vault.patch").write_text("x\n")
+    (out / "report.md").write_text("**Read**\n\n- `a/one@1111111 → 2222222`\n")
     env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "OUT": str(out), "BRANCH": "brain-pull/2026-11-02",
            "REUSE": "false", "REPO": "o/r", "GH_TOKEN": "t", "DISPATCH_CI": dispatch}  # fmt: skip
     result = subprocess.run(["bash", "-c", step["run"]], cwd=tmp_path, capture_output=True, text=True, env=env)
@@ -415,6 +418,48 @@ def test_brain_pull_dispatches_ci_only_without_scout(dispatch: str, dispatched: 
     calls = log.read_text()
     assert "git push -q -u origin brain-pull/2026-11-02" in calls and "gh pr create" in calls
     assert ("gh workflow run base-ci.yml" in calls) is dispatched
+    # The PR body: the run's before → after report first, then Claude's lines (here the fallback).
+    assert f"--body-file {out}/body.md" in calls
+    assert (out / "body.md").read_text() == "**Read**\n\n- `a/one@1111111 → 2222222`\n\n" \
+                                            "Notes updated by the Brain pull workflow.\n"  # fmt: skip
+
+
+def package(project: Path, tmp_path: Path, read: str) -> tuple[subprocess.CompletedProcess[str], str, str]:
+    """Run the update job's Package step; return its result, report.md and the job summary."""
+    flow = yaml.safe_load((project / PULL).read_text())
+    step = next(s for s in flow["jobs"]["update"]["steps"] if s.get("id") == "package")
+    (tmp_path / "read.md").write_text(read)
+    summary, output = tmp_path / "summary", tmp_path / "output"
+    env = {**os.environ, "VAULT_DIR": step["env"]["VAULT_DIR"], "READ": str(tmp_path / "read.md"),
+           "GITHUB_STEP_SUMMARY": str(summary), "GITHUB_OUTPUT": str(output)}  # fmt: skip
+    result = subprocess.run(["bash", "-c", step["run"]], cwd=project, capture_output=True, text=True, env=env)
+    report = project / "brain-pull-out/report.md"
+    return result, report.read_text() if report.exists() else "", summary.read_text() if summary.exists() else ""
+
+
+READ = "- `a/one@0000000 → 1111111`\n- `c/new@none → 3333333`\n"
+
+
+def test_brain_pull_report_lists_notes_changed(project: Path, tmp_path: Path) -> None:
+    """Computed, not written by Claude: what it read, before → after, and each note changed."""
+    copy_ = tmp_path / project.name
+    shutil.copytree(project, copy_)
+    for name in ["🏠 Home.md", "📐 Conventions.md"]:
+        with (copy_ / "knowledge" / name).open("a", encoding="utf-8") as f:
+            f.write("\nedited\n")
+    result, report, summary = package(copy_, tmp_path, READ)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert report == "**Read**\n\n" + READ + "\n**Vault:** none → 2 notes\n\n" \
+                     "- `knowledge/🏠 Home.md`\n- `knowledge/📐 Conventions.md`\n"  # fmt: skip
+    assert summary == "\n" + report
+
+
+def test_brain_pull_report_vault_unchanged(project: Path, tmp_path: Path) -> None:
+    copy_ = tmp_path / project.name
+    shutil.copytree(project, copy_)
+    result, report, _ = package(copy_, tmp_path, "")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert report == "**Read**\n\n- nothing listed\n\n**Vault unchanged**\n"
 
 
 def scope_check(project: Path, out: Path, prefix: str) -> subprocess.CompletedProcess[str]:
@@ -501,6 +546,38 @@ def test_gate_follows(project: Path, tmp_path: Path) -> None:
     assert result.stdout == "a/one: releases\nb/two: everything\nc/three: everything\n" \
                             "d/four: wiki:Security, design-records\n"  # fmt: skip
     assert "repos entry 'not a repo' is not owner/name" in result.stderr
+
+
+FAKE_GH = """#!/usr/bin/env python3
+import json, sys
+path = sys.argv[-1]
+repo = "/".join(path.split("/")[1:3])
+if "/releases" in path:
+    out = []
+elif "per_page=1&until=" in path:
+    out = [] if repo == "c/new" else [{"sha": "0" * 40, "commit": {"message": "old"}}]
+elif path.endswith("per_page=1"):
+    out = [{"sha": {"a/one": "1", "b/two": "2", "c/new": "3"}[repo] * 40, "commit": {"message": "head"}}]
+else:  # the window's commits, paginated: b/two changed nothing
+    out = [[] if repo == "b/two" else [{"sha": "1" * 40, "commit": {"message": "feat: x"}}]]
+print(json.dumps(out))
+"""
+
+
+def test_gate_reads_heads_before_and_after(project: Path, tmp_path: Path) -> None:
+    """--read: each changed source's head at SINCE and now; an unchanged one isn't listed."""
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "gh").write_text(FAKE_GH)
+    (bin_ / "gh").chmod(0o755)
+    notes = {"🧭 Followed.md": "---\nrepos: [a/one, b/two, c/new]\n---\n"}
+    read, out = tmp_path / "read.md", tmp_path / "changes.md"
+    result = gate(project, tmp_path / "p", notes, "2026-11-01T05:00:00Z", str(out), "--read", str(read),
+                  env={"PATH": f"{bin_}:{os.environ['PATH']}"})  # fmt: skip
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "a/one c/new\n"
+    assert read.read_text() == "- `a/one@0000000 → 1111111`\n- `c/new@none → 3333333`\n"
+    assert "## a/one" in out.read_text() and "## b/two" not in out.read_text()
 
 
 BAD_SUBSCRIPTIONS = {

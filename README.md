@@ -18,7 +18,7 @@ rest from base's answers. It needs template-base `v2.0.0` or later.
 | `[vault_dir]/` | The vault's seeds: `🏠 Home`, `📐 Conventions`, `decisions/` (indexed by `Decisions.base`), `_templates/📝 Design Record`, `.obsidian/{app,templates}.json`, and `🛰️ Subscriptions` with Brain pull. Seeds are the brain's once written |
 | `scripts/checks.d/20-obsidian.sh` | Runs `scripts/check-vault.py` (front matter, embeds, design records, actor statuses and supersession, property types), then the brain's own `scripts/check.sh` |
 | Slots | `.agents/stack.md`, `stack-ci.yml`, `.gitignore`, `.pre-commit-config.yaml`, `.claude/settings.json`, `README.md`, `.github/dependabot.yml`, `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/config.yml` |
-| `obsidian-brain-pull.yml` | With `brain_pull`: daily, Claude Code updates the notes whose sources changed, in one PR |
+| `obsidian-brain-pull.yml` | With `brain_pull`: daily, Claude Code updates the notes whose sources changed, in one PR. The PR body and job summary open with what it read and changed, before → after: `owner/repo@<sha then> → <sha now>` per source, then `none → n notes` with each note (or vault unchanged) |
 
 ## Brain pull setup
 
