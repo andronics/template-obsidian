@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.2](https://github.com/andronics/template-obsidian/compare/v1.5.1...v1.5.2) (2026-11-04)
+
+
+### 🐛 Bug Fixes
+
+* **copier:** descriptions with any Unicode and any length scaffold cleanly ([#35](https://github.com/andronics/template-obsidian/issues/35)) ([4af909e](https://github.com/andronics/template-obsidian/commit/4af909ec16360410c759783531ab647831fd321b))
+
 ## [1.5.1](https://github.com/andronics/template-obsidian/compare/v1.5.0...v1.5.1) (2026-11-04)
 
 
