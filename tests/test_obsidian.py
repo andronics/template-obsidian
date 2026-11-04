@@ -55,6 +55,22 @@ def test_reads_base_answers(project: Path) -> None:
     assert "Released into the public domain" in (project / "README.md").read_text()
 
 
+# Outside the Basic Multilingual Plane (💡), CJK, a quote and a backslash: `tojson` wrote the emoji
+# as a surrogate pair, which YAML reads back as two characters.
+UNICODE = 'Ideas 💡 in 漢字, with a "quote" and a back\\slash'
+
+
+def test_unicode_description(base_src: Path, obsidian_src: Path, tmp_path: Path) -> None:
+    """Any Unicode in base's description renders: the recorded base answers match base's file (no
+    "stale" error), and the brain passes its checks."""
+    project = render(base_src, obsidian_src, tmp_path / "demo", base={"description": UNICODE})
+    recorded = yaml.safe_load((project / ".copier-answers.stack-obsidian.yml").read_text())["base_answers"]
+    assert recorded["description"] == UNICODE
+    assert (project / "README.md").read_text().startswith(f"# demo\n\n{UNICODE}\n")
+    result = checks(project)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.mark.parametrize(("base", "error"), [
     (None, "needs template-base first: .copier-answers.base.yml is missing"),
     ("v1.0.0", "needs template-base v2.0.0 or later; this project has v1.0.0"),
