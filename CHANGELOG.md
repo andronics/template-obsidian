@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0](https://github.com/andronics/template-obsidian/compare/v1.4.0...v1.5.0) (2026-11-04)
+
+
+### ✨ Features
+
+* **brain-pull:** report each run before → after ([#30](https://github.com/andronics/template-obsidian/issues/30)) ([74b5760](https://github.com/andronics/template-obsidian/commit/74b5760199cb34c20985b4de6010347b30c80bde))
+* **check-vault:** findings never print a value (0004) ([#32](https://github.com/andronics/template-obsidian/issues/32)) ([e464387](https://github.com/andronics/template-obsidian/commit/e464387c9c15cfb4e2061ac97243c4656b997456))
+
+
+### 📚 Documentation
+
+* **decisions:** propose findings that never print a value (0004) ([#29](https://github.com/andronics/template-obsidian/issues/29)) ([19d6b36](https://github.com/andronics/template-obsidian/commit/19d6b369abfb707a2000652be36daa8dd084bf4a))
+
 ## [1.4.0](https://github.com/andronics/template-obsidian/compare/v1.3.1...v1.4.0) (2026-11-03)
 
 
