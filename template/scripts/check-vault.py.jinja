@@ -24,6 +24,14 @@ Template-owned: template-obsidian; changes come through `copier update` (its dec
     folder) that it registers hold a value of their type; a property it doesn't register,
     or a type this check doesn't know, isn't checked (decision 0003)
 
+A finding never prints a value (decision 0004): it names the note, the property and the
+rule that failed, and where it helps the YAML type of what was found (`a string`, `a list`;
+for a list, its first bad item by position: `item 2 is a number`). Never a property's
+value, part of one, or text a parser quoted from the front matter: a secret pasted into
+the wrong line must not reach a terminal, an assistant's context or a CI log. Broken
+YAML gives only its line and column. The one exception is an embed's target, which is
+body text written as a link, and needed to fix it. A new check follows this rule.
+
 The AI files' context budget is template-base's check (scripts/base-contract.py).
 
     uv run scripts/check-vault.py [--vault DIR]
@@ -37,6 +45,7 @@ import re
 import subprocess
 import sys
 from datetime import date, datetime
+from collections.abc import Callable
 from pathlib import Path
 
 import yaml
@@ -106,13 +115,13 @@ def check_records(records: dict[Path, dict], bodies: dict[Path, str], errors: li
             errors.append(f"{where}: missing properties: {', '.join(missing)}")
             continue
         if props["kind"] != "decision":
-            errors.append(f"{where}: kind is {props['kind']!r}, not 'decision'")
-        if props["status"] not in STATUSES:
-            errors.append(f"{where}: status {props['status']!r} is not one of {', '.join(sorted(STATUSES))}")
+            errors.append(f"{where}: kind must be 'decision'")
+        if not isinstance(props["status"], str) or props["status"] not in STATUSES:
+            errors.append(f"{where}: status is not one of {', '.join(sorted(STATUSES))}")
         number = props["number"]
         name = RECORD_NAME.match(path.stem)
         if not isinstance(number, int) or isinstance(number, bool):
-            errors.append(f"{where}: number {number!r} is not a whole number")
+            errors.append(f"{where}: number is {yaml_type(number)}, not a whole number")
         elif not name or int(name.group(1)) != number:
             errors.append(f"{where}: the name must be '📝 {number:04d} Title In Title Case'")
         elif number in numbers:
@@ -132,8 +141,11 @@ def check_actors(actors: dict[Path, dict], errors: list[str]) -> None:
     for path, props in actors.items():
         where = f"error: {path}"
         status = props.get("status")
-        if status not in ACTOR_STATUSES:
-            errors.append(f"{where}: status {status!r} is not one of {', '.join(sorted(ACTOR_STATUSES))}")
+        allowed = ", ".join(sorted(ACTOR_STATUSES))
+        if status is None:
+            errors.append(f"{where}: status is missing; it must be one of {allowed}")
+        elif not isinstance(status, str) or status not in ACTOR_STATUSES:
+            errors.append(f"{where}: status is not one of {allowed}")
         if status == "superseded" and not links(props.get("superseded_by")) + links(props.get("partially_superseded_by")):
             errors.append(f"{where}: status is 'superseded', so superseded_by (or, for a split, "
                           "partially_superseded_by) must name who took over")
@@ -169,17 +181,39 @@ def property_types(vault: Path, errors: list[str]) -> dict[str, str]:
 SCALAR = (str, int, float, bool, date)  # a datetime is a date too
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 DATETIME = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$")
+# The list types, and whether an item of one is valid.
+ITEMS = {
+    "multitext": lambda i: isinstance(i, SCALAR),
+    "aliases": lambda i: isinstance(i, str),
+    "tags": lambda i: isinstance(i, str),
+}
+
+
+def each(item: Callable[..., bool]) -> Callable[..., bool]:
+    """A list type's check: a list whose every item is valid."""
+    return lambda v: isinstance(v, list) and all(item(i) for i in v)
+
+
 # Each type Obsidian writes, and whether a value YAML parsed is one; a type not here isn't checked.
 TYPES = {
     "text": lambda v: isinstance(v, SCALAR),
-    "multitext": lambda v: isinstance(v, list) and all(isinstance(i, SCALAR) for i in v),
-    "aliases": lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v),
-    "tags": lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v),
+    **{kind: each(item) for kind, item in ITEMS.items()},
     "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
     "checkbox": lambda v: isinstance(v, bool),
     "date": lambda v: (isinstance(v, date) and not isinstance(v, datetime)) or (isinstance(v, str) and bool(DATE.match(v))),
     "datetime": lambda v: isinstance(v, date) or (isinstance(v, str) and bool(DATETIME.match(v))),
 }
+
+
+def yaml_type(value: object) -> str:
+    """What YAML parsed, by its type's name: the one thing a finding may say about a value (decision 0004)."""
+    if value is None:
+        return "empty"
+    for kind, name in ((bool, "a boolean"), ((int, float), "a number"), (datetime, "a datetime"), (date, "a date"),
+                       ((str, bytes), "a string"), ((list, tuple), "a list"), ((dict, set), "a mapping")):  # fmt: skip
+        if isinstance(value, kind):
+            return name
+    return "a value"
 
 
 def check_types(rel: Path, props: dict, types: dict[str, str], errors: list[str]) -> None:
@@ -189,8 +223,12 @@ def check_types(rel: Path, props: dict, types: dict[str, str], errors: list[str]
         valid = TYPES.get(kind or "")
         if valid is None or value is None or value == [] or valid(value):
             continue
-        shown = json.dumps(value, ensure_ascii=False, default=str)
-        errors.append(f"error: {rel}: {name} is {shown}, not {kind}")
+        found = yaml_type(value)
+        item = ITEMS.get(kind or "")
+        if item and isinstance(value, list):
+            n, bad = next((n, i) for n, i in enumerate(value, 1) if not item(i))
+            found += f" whose item {n} is {yaml_type(bad)}"
+        errors.append(f"error: {rel}: {name} is {found}, not {kind}")
 
 
 def links(value: object) -> list[object]:
@@ -212,10 +250,11 @@ def check_successors(notes: dict[Path, dict], what: str, errors: list[str]) -> N
         named: dict[str, set[str]] = {}
         for forward, back in PAIRS:
             for prop, other in ((forward, back), (back, forward)):
-                for value in links(props.get(prop)):
+                listed = isinstance(props.get(prop), list)
+                for n, value in enumerate(links(props.get(prop)), 1):
                     target = by_name.get(link_name(value) or "")
                     if not target:
-                        errors.append(f"{where}: {prop} {value!r}, which is not {what}")
+                        errors.append(f"{where}: {prop}{f' item {n}' if listed else ''} is not a link to {what}")
                         continue
                     if target == path:
                         errors.append(f"{where}: {prop} names the note itself")
@@ -251,7 +290,10 @@ def main() -> int:
             try:
                 props = yaml.safe_load(front) or {}
             except yaml.YAMLError as e:
-                errors.append(f"error: {rel}: front matter is not valid YAML: {e}".splitlines()[0])
+                # Only the parser's position, as a line of the note: its message can quote the note (decision 0004).
+                mark = getattr(e, "problem_mark", None) or getattr(e, "context_mark", None)
+                at = f" (line {mark.line + 2}, column {mark.column + 1})" if mark else ""
+                errors.append(f"error: {rel}: front matter is not valid YAML{at}")
                 continue
             if not isinstance(props, dict):
                 errors.append(f"error: {rel}: front matter is not a mapping of properties")

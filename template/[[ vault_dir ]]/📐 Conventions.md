@@ -26,3 +26,7 @@ tags: [conventions]
 ## 🎭 Actors
 
 - A note with `kind: actor` is an identity an automation acts as. Its `status` is `planned`, `created`, `installed`, `active`, `retired`, `superseded` or `deleted`, and its successors are linked like a record's: `superseded_by` (and `status: superseded`, or `deleted` once it is gone too), or `partially_superseded_by` for a split, with `supersedes` and `partially_supersedes` on the successors.
+
+## 🔍 Checks
+
+- A check or script that reports on notes names the note, the property and the rule that failed, never a property's value: a secret pasted into the wrong property must not reach a terminal, an assistant or a CI log.

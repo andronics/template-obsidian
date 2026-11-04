@@ -215,8 +215,14 @@ P3, P4 = "decisions/📝 0003 Many Points.md", "decisions/📝 0004 Change One P
 VAULT_CASES = {
     "valid": ({}, ""),
     "broken embed": ({"🧭 Topic.md": "See [[🧭 Not Yet]].\n\n![[missing.png]]\n"}, "embeds a missing file"),
-    "bad front matter": ({"🧭 Topic.md": "---\ntags: [a\n---\n"}, "not valid YAML"),
-    "bad status": ({"decisions/📝 0002 Follow Upstream.md": NEW.replace("approved", "done")}, "status 'done'"),
+    "bad front matter": ({"🧭 Topic.md": "---\ntags: [a\n---\n"}, "error: 🧭 Topic.md: front matter is not valid YAML (line 2, column 9)\n"),
+    "bad status": ({"decisions/📝 0002 Follow Upstream.md": NEW.replace("approved", "done")},
+                   "status is not one of approved, implemented, proposed, rejected, superseded"),
+    "bad kind": ({"decisions/📝 0002 Follow Upstream.md": NEW.replace("kind: decision", "kind: note")}, "kind must be 'decision'"),
+    "number not a whole number": ({"decisions/📝 0002 Follow Upstream.md": NEW.replace("number: 2", "number: two")},
+                                  "number is a string, not a whole number"),
+    "superseded_by not a link": ({"decisions/📝 0001 Keep Notes Here.md": OLD.replace('"[[📝 0002 Follow Upstream]]"', "later")},
+                                 "superseded_by is not a link to a design record"),
     "duplicate number": ({"decisions/📝 0002 Also Two.md": NEW}, "number 2 is also"),
     "missing heading": ({"decisions/📝 0002 Follow Upstream.md": NEW.replace("## ⚖️ Alternatives considered", "")},
                         "missing headings: Alternatives considered"),
@@ -227,7 +233,7 @@ VAULT_CASES = {
     "one-sided partial": ({P3: PART_OLD.replace('partially_superseded_by: ["[[📝 0004 Change One Point]]"]\n', "")},
                           "partially_supersedes 📝 0003 Many Points, whose partially_superseded_by doesn't link back"),
     "partial to a non-record": ({P4: PART_NEW.replace("📝 0003 Many Points", "🧭 Topic")},
-                                "partially_supersedes '[[🧭 Topic]]', which is not a design record"),
+                                "partially_supersedes item 1 is not a link to a design record"),
     "partial to itself": ({P4: PART_NEW.replace("📝 0003 Many Points", "📝 0004 Change One Point")},
                           "partially_supersedes names the note itself"),
     "wholly and partially": ({P4: PART_NEW.replace("supersedes: []", 'supersedes: ["[[📝 0003 Many Points]]"]'),
@@ -238,7 +244,9 @@ VAULT_CASES = {
                                "actors/🔔 Herald.md": ACTOR.format(status="active", links='supersedes: ["[[🎺 Old Bot]]"]\n'),
                                "actors/📯 Crier.md": ACTOR.format(status="retired", links="")}, ""),
     "actor bad status": ({"actors/📯 Crier.md": ACTOR.format(status="gone", links='partially_supersedes: ["[[🎺 Old Bot]]"]\n')},
-                         "status 'gone' is not one of active, created, deleted, installed, planned, retired, superseded"),
+                         "status is not one of active, created, deleted, installed, planned, retired, superseded"),
+    "actor without status": ({"actors/📯 Crier.md": CRIER.replace("status: installed\n", "")},
+                             "status is missing; it must be one of active, created, deleted, installed, planned, retired, superseded"),
     "actor superseded alone": ({"actors/🎺 Old Bot.md": ACTOR.format(status="superseded", links="")},
                                "status is 'superseded', so superseded_by (or, for a split, partially_superseded_by)"),
     "actor still active": ({"actors/🎺 Old Bot.md": ACTOR.format(status="active", links='superseded_by: "[[🔔 Herald]]"\n'),
@@ -247,7 +255,7 @@ VAULT_CASES = {
     "actor one-sided": ({"actors/📯 Crier.md": CRIER.replace("partially_supersedes", "supersedes")},
                         "partially_superseded_by 📯 Crier, whose partially_supersedes doesn't link back"),
     "actor to a record": ({"actors/🔔 Herald.md": ACTOR.format(status="active", links='supersedes: ["[[📝 0001 Keep Notes Here]]"]\n')},
-                          "supersedes '[[📝 0001 Keep Notes Here]]', which is not an actor note"),
+                          "supersedes item 1 is not a link to an actor note"),
     "actor template skipped": ({"_templates/🎭 Actor.md": ACTOR.format(status="", links="superseded_by: x\n")}, ""),
     # Records take `created` in place of `date`, or both (decision 0003).
     "record with created": ({"decisions/📝 0002 Follow Upstream.md": NEW.replace("date:", "created:")}, ""),
@@ -314,16 +322,17 @@ TYPE_CASES = {
         "status: approved\n", "status: approved\napproved: 2026-11-03\napproved_by: A. Maintainer\n")}, ""),
     "no types.json": (None, typed(updated='"1 Nov"', done="yes", tags="topic"), ""),
     "templates folder skipped": (TYPES, {"_templates/🧭 Typed.md": TYPED.replace("done: false", 'done: "{{x}}"')}, ""),
-    "bad date": (TYPES, typed(updated='"1 Nov"'), 'error: 🧭 Typed.md: updated is "1 Nov", not date'),
-    "timestamp for a date": (TYPES, typed(updated="2026-11-01T10:30:00"), "updated is \"2026-11-01 10:30:00\", not date"),
-    "bad datetime": (TYPES, typed(seen='"2026-11-01 10:30"'), 'seen is "2026-11-01 10:30", not datetime'),
-    "boolean for a number": (TYPES, typed(count="true"), "count is true, not number"),
-    "string for a checkbox": (TYPES, typed(done='"yes"'), 'done is "yes", not checkbox'),
-    "one value for a list": (TYPES, typed(related='"[[🏠 Home]]"'), 'related is "[[🏠 Home]]", not multitext'),
-    "nested list in a list": (TYPES, typed(related="[[[🏠 Home]]]"), 'related is [[["🏠 Home"]]], not multitext'),
-    "number in aliases": (TYPES, typed(aliases="[1]"), "aliases is [1], not aliases"),
-    "one tag": (TYPES, typed(tags="topic"), 'tags is "topic", not tags'),
-    "unquoted link for text": (TYPES, typed(summary="[[🏠 Home]]"), 'summary is [["🏠 Home"]], not text'),
+    "bad date": (TYPES, typed(updated='"1 Nov"'), 'error: 🧭 Typed.md: updated is a string, not date'),
+    "timestamp for a date": (TYPES, typed(updated="2026-11-01T10:30:00"), "updated is a datetime, not date"),
+    "bad datetime": (TYPES, typed(seen='"2026-11-01 10:30"'), "seen is a string, not datetime"),
+    "boolean for a number": (TYPES, typed(count="true"), "count is a boolean, not number"),
+    "string for a checkbox": (TYPES, typed(done='"yes"'), "done is a string, not checkbox"),
+    "one value for a list": (TYPES, typed(related='"[[🏠 Home]]"'), "related is a string, not multitext"),
+    "nested list in a list": (TYPES, typed(related="[[[🏠 Home]]]"), "related is a list whose item 1 is a list, not multitext"),
+    "number in aliases": (TYPES, typed(aliases="[1]"), "aliases is a list whose item 1 is a number, not aliases"),
+    "one tag": (TYPES, typed(tags="topic"), "tags is a string, not tags"),
+    "second item bad": (TYPES, typed(related="['[[🏠 Home]]', 2, {a: 1}]"), "related is a list whose item 3 is a mapping, not multitext"),
+    "unquoted link for text": (TYPES, typed(summary="[[🏠 Home]]"), "summary is a list, not text"),
     "not JSON": ("{types:", typed(), "error: .obsidian/types.json: not JSON whose types is a mapping"),
     "types not a mapping": ({"types": ["date"]}, typed(), "error: .obsidian/types.json: not JSON whose types is a mapping"),
 }  # fmt: skip
@@ -341,6 +350,47 @@ def test_property_types(case: str, project: Path, tmp_path: Path) -> None:
     else:
         assert result.returncode == 1 and error in result.stdout, result.stdout + result.stderr
         assert len(result.stdout.splitlines()) == 1, result.stdout
+
+
+SECRET = "SECRET-4111111111111111"
+# A secret pasted into each property a check reads, and into front matter the parser quotes (decision 0004).
+LEAKS = {
+    "🧭 Typed.md": typed(updated=SECRET, count=SECRET, done=SECRET, related=f"[ok, [{SECRET}]]", aliases=f"[{SECRET}, 1]",
+                         tags=SECRET, summary=f"[{SECRET}]")["🧭 Typed.md"],
+    "decisions/📝 0002 Follow Upstream.md": NEW.replace("kind: decision", f"kind: {SECRET}").replace(
+        "status: approved", f"status: {SECRET}").replace("number: 2", f"number: {SECRET}").replace(
+        'supersedes: ["[[📝 0001 Keep Notes Here]]"]', f"supersedes: [{SECRET}]"),
+    "decisions/📝 0001 Keep Notes Here.md": OLD.replace('"[[📝 0002 Follow Upstream]]"', SECRET),
+    "actors/📯 Crier.md": CRIER.replace("status: installed", f"status: {SECRET}").replace('"[[🎺 Old Bot]]"', SECRET),
+    "actors/🔔 Herald.md": HERALD.replace('partially_supersedes: ["[[🎺 Old Bot]]"]', f"superseded_by: {SECRET}"),
+    "🧭 Escape.md": f'---\nnote: "\\q{SECRET}"\n---\n',
+    "🧭 Alias.md": f"---\nnote: *{SECRET}\n---\n",
+    "🧭 Tag.md": f"---\nnote: !{SECRET} x\n---\n",
+    "🧭 Token.md": f"---\nnote: [{SECRET}}}\n---\n",
+    "🧭 Indent.md": f"---\nnote: a\n  {SECRET}: b\n---\n",
+}
+
+
+def test_findings_never_print_a_value(project: Path, tmp_path: Path) -> None:
+    """A secret in any property, or in broken YAML, is never printed; the note and property are (decision 0004)."""
+    files = {**LEAKS, ".obsidian/types.json": json.dumps(TYPES)}
+    _, result = run_vault_check(project, tmp_path, files)
+    out = result.stdout + result.stderr
+    assert result.returncode == 1 and not result.stderr, out
+    assert SECRET not in out and "4111" not in out, out
+    for name in ["🧭 Typed.md", "📝 0002 Follow Upstream.md", "📝 0001 Keep Notes Here.md", "📯 Crier.md", "🔔 Herald.md",
+                 "🧭 Escape.md", "🧭 Alias.md", "🧭 Tag.md", "🧭 Token.md", "🧭 Indent.md"]:
+        assert name in out, (name, out)
+    for finding in ["updated is a string, not date", "count is a string, not number", "done is a string, not checkbox",
+                    "related is a list whose item 2 is a list, not multitext", "aliases is a list whose item 2 is a number, not aliases",
+                    "tags is a string, not tags", "summary is a list, not text", "kind must be 'decision'",
+                    "status is not one of approved", "number is a string, not a whole number",
+                    "supersedes item 1 is not a link to a design record", "superseded_by is not a link to a design record",
+                    "partially_supersedes item 1 is not a link to an actor note", "superseded_by is not a link to an actor note",
+                    "status is not one of active"]:
+        assert finding in out, (finding, out)
+    for note in ["Escape", "Alias", "Tag", "Token", "Indent"]:
+        assert re.search(rf"error: 🧭 {note}\.md: front matter is not valid YAML \(line [23], column \d+\)$", out, re.M), (note, out)
 
 
 def test_vault_check_without_actors_reads_as_before(project: Path) -> None:
