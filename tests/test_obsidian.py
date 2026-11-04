@@ -333,6 +333,9 @@ TYPE_CASES = {
     "one tag": (TYPES, typed(tags="topic"), "tags is a string, not tags"),
     "second item bad": (TYPES, typed(related="['[[🏠 Home]]', 2, {a: 1}]"), "related is a list whose item 3 is a mapping, not multitext"),
     "unquoted link for text": (TYPES, typed(summary="[[🏠 Home]]"), "summary is a list, not text"),
+    "quoted impossible date": (TYPES, typed(updated="'2026-13-45'"), "error: 🧭 Typed.md: updated is a string, not date"),
+    "quoted impossible datetime": (TYPES, typed(seen="'2026-11-04T25:99'"), "error: 🧭 Typed.md: seen is a string, not datetime"),
+    "quoted impossible day in a datetime": (TYPES, typed(seen='"2026-02-30T10:30"'), "seen is a string, not datetime"),
     "not JSON": ("{types:", typed(), "error: .obsidian/types.json: not JSON whose types is a mapping"),
     "types not a mapping": ({"types": ["date"]}, typed(), "error: .obsidian/types.json: not JSON whose types is a mapping"),
 }  # fmt: skip
@@ -391,6 +394,33 @@ def test_findings_never_print_a_value(project: Path, tmp_path: Path) -> None:
         assert finding in out, (finding, out)
     for note in ["Escape", "Alias", "Tag", "Token", "Indent"]:
         assert re.search(rf"error: 🧭 {note}\.md: front matter is not valid YAML \(line [23], column \d+\)$", out, re.M), (note, out)
+
+
+# Dates YAML or Python can't build, unquoted (YAML raises while loading) and quoted (the type check's regex
+# matches the shape only); each value's text must never be printed (decision 0004).
+IMPOSSIBLE = {
+    "🧭 Leap.md": ("---\ncreated: 2026-02-30\n---\n", "created is not a real date", "2026-02-30"),
+    "🧭 Month.md": ("---\ntags: [topic]\nupdated: 2026-13-45\n---\n", "updated is not a real date", "13-45"),
+    "🧭 Hour.md": ("---\nseen: 2026-11-04T25:99:00\n---\n", "seen is not a real date", "25:99"),
+    "🧭 Listed.md": ("---\nrelated: [ok, 2026-04-31]\n---\n", "related is not a real date", "04-31"),
+    "🧭 Quoted.md": ("---\nupdated: '2026-13-46'\n---\n", "updated is a string, not date", "13-46"),
+    "🧭 Clock.md": ("---\nseen: '2026-11-04T25:98'\n---\n", "seen is a string, not datetime", "25:98"),
+    "🧭 Keyed.md": ("---\n2026-02-31: x\n---\n", "front matter has a date that doesn't exist", "02-31"),
+}
+
+
+def test_impossible_dates_are_findings(project: Path, tmp_path: Path) -> None:
+    """An impossible date, quoted or not, is one finding naming the note and property, never the value, and
+    the check goes on to the other notes (the typed note's valid dates still pass)."""
+    files = {name: text for name, (text, _, _) in IMPOSSIBLE.items()}
+    _, result = run_vault_check(project, tmp_path, {**typed(), **files, ".obsidian/types.json": json.dumps(TYPES)})
+    out = result.stdout + result.stderr
+    assert result.returncode == 1 and not result.stderr and "Traceback" not in out, out
+    assert len(result.stdout.splitlines()) == len(IMPOSSIBLE), out
+    for name, (_, finding, value) in IMPOSSIBLE.items():
+        assert f"error: {name}: {finding}" in result.stdout.splitlines(), (name, out)
+        assert value not in out, (value, out)
+    assert "Typed" not in out, out
 
 
 def test_vault_check_without_actors_reads_as_before(project: Path) -> None:
