@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/andronics/template-obsidian/compare/v1.5.0...v1.5.1) (2026-11-04)
+
+
+### 🐛 Bug Fixes
+
+* **check-vault:** impossible dates are findings, not tracebacks or passes ([#33](https://github.com/andronics/template-obsidian/issues/33)) ([130c675](https://github.com/andronics/template-obsidian/commit/130c6758a6092b1195ab6afda62976e43454d5c0))
+
 ## [1.5.0](https://github.com/andronics/template-obsidian/compare/v1.4.0...v1.5.0) (2026-11-04)
 
 
