@@ -1,6 +1,6 @@
 # 0004: Findings that never print a value
 
-Status: Proposed
+Status: Approved (2026-11-04)
 Date: 2026-11-04
 Authors: Stephen Cox
 
@@ -108,21 +108,20 @@ Constraints: no check changes what it accepts or rejects; only the wording of fi
 - A secret pasted into any property no longer reaches the terminal, an assistant's context or a CI log by way
   of this check. It is still in the note and in git history: removing it is the brain's job, and this record
   doesn't change that.
-- Decision 0003's finding format is replaced; its type table, records' `created` and the rest stand. When
-  this record is approved, 0003's Status line notes it (see Open questions).
+- Decision 0003's finding format is replaced; its type table, records' `created` and the rest stand.
+  0003's Status line notes it (see Resolved questions).
 - Brains get the change on `copier update`; `check-vault.py` is template-owned, so no brain edits it.
 - Rollback: revert the release; findings print values again.
 
-## Open questions
+## Resolved questions
 
-1. **How should 0003 record that part of it is replaced?** This repo's own records are plain Markdown with a
-   `Status:` line, not vault notes, so decision 0002's `partially_superseded_by` property doesn't apply to
-   them. *Recommendation:* when this record is approved, add a line under 0003's `Status: Approved`:
-   `Partly superseded by 0004 (the finding format).`, and name it in the index row. It keeps 0003's status
-   true and points readers to the change, without inventing a property for this folder.
-2. **Should a type finding also give the expected form** (`updated is a string, not date (YYYY-MM-DD)`)?
-   *Recommendation:* no. The type name says it, decision 0003's table spells out each form, and a shorter
-   rule is easier to keep in every future check.
-3. **Should the rule bind brains' own checks** (`scripts/check.sh`, a brain's own property checks) as well as
-   this template's? *Recommendation:* state it as a convention in the seeded `📐 Conventions` note for new
-   brains and leave each brain's own scripts to it: this template owns only `check-vault.py`.
+Approved by the brain coordinator for Stephen, 2026-11-04, with each open question answered as recommended:
+
+1. **How should 0003 record that part of it is replaced?** A line under its `Status: Approved`:
+   `Partly superseded by 0004 (the finding format).`, and its index row says so. Decision 0002's
+   `partially_superseded_by` property is for vault notes, not this folder's plain Markdown records.
+2. **Should a type finding also give the expected form?** No. The type name says it, decision 0003's table
+   spells out each form, and a shorter rule is easier to keep in every future check.
+3. **Should the rule bind brains' own checks?** It becomes a convention in the seeded `📐 Conventions` note
+   that new brains start with; each brain's own scripts stay its own. This template owns only
+   `check-vault.py`.
