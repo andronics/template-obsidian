@@ -200,9 +200,57 @@ TYPES = {
     **{kind: each(item) for kind, item in ITEMS.items()},
     "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
     "checkbox": lambda v: isinstance(v, bool),
-    "date": lambda v: (isinstance(v, date) and not isinstance(v, datetime)) or (isinstance(v, str) and bool(DATE.match(v))),
-    "datetime": lambda v: isinstance(v, date) or (isinstance(v, str) and bool(DATETIME.match(v))),
+    "date": lambda v: (isinstance(v, date) and not isinstance(v, datetime)) or (isinstance(v, str) and real(v, DATE, date)),
+    "datetime": lambda v: isinstance(v, date) or (isinstance(v, str) and real(v, DATETIME, datetime)),
 }
+
+
+def real(value: str, shape: re.Pattern[str], kind: type[date]) -> bool:
+    """A quoted date or datetime has the shape and names a day and time that exist (not 2026-13-45)."""
+    if not shape.match(value):
+        return False
+    try:
+        kind.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+TIMESTAMP = "tag:yaml.org,2002:timestamp"
+
+
+def impossible_date(front: str) -> str | None:
+    """The property whose unquoted date YAML can't build (2026-02-30), or None if it can't be told.
+
+    Composing reads the YAML without building any value, so it can't fail on the date; each timestamp node
+    under a property is then built alone. Only the property's name is returned, never the node's text
+    (decision 0004)."""
+    try:
+        root = yaml.compose(front, Loader=yaml.SafeLoader)
+    except yaml.YAMLError:
+        return None
+    if not isinstance(root, yaml.MappingNode):
+        return None
+    build = yaml.SafeLoader("")
+
+    def bad(node: yaml.Node) -> bool:
+        if isinstance(node, yaml.ScalarNode):
+            if node.tag != TIMESTAMP:
+                return False
+            try:
+                build.construct_yaml_timestamp(node)
+            except ValueError:
+                return True
+            return False
+        children = node.value if isinstance(node, yaml.SequenceNode) else [n for pair in node.value for n in pair]
+        return any(bad(child) for child in children)
+
+    for key, value in root.value:
+        if bad(key):
+            return None  # the name itself is the bad date: it can't be printed
+        if bad(value) and isinstance(key, yaml.ScalarNode):
+            return key.value
+    return None
 
 
 def yaml_type(value: object) -> str:
@@ -294,6 +342,12 @@ def main() -> int:
                 mark = getattr(e, "problem_mark", None) or getattr(e, "context_mark", None)
                 at = f" (line {mark.line + 2}, column {mark.column + 1})" if mark else ""
                 errors.append(f"error: {rel}: front matter is not valid YAML{at}")
+                continue
+            except ValueError:
+                # A date YAML can't build (2026-02-30); the parser's message quotes it (decision 0004).
+                name = impossible_date(front)
+                errors.append(f"error: {rel}: {name} is not a real date" if name
+                              else f"error: {rel}: front matter has a date that doesn't exist")
                 continue
             if not isinstance(props, dict):
                 errors.append(f"error: {rel}: front matter is not a mapping of properties")
