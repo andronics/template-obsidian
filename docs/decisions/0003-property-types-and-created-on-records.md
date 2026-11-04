@@ -1,6 +1,7 @@
 # 0003: Property types from types.json, and created on design records
 
 Status: Approved
+Partly superseded by 0004 (the finding format).
 Date: 2026-11-03
 Authors: Stephen Cox
 
